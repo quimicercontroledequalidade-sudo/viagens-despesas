@@ -85,6 +85,21 @@ table.t td { padding: .5rem .6rem; border-top: 1px solid var(--borda); vertical-
 table.t td.num, table.t th.num { text-align: right; white-space: nowrap; }
 table.t tfoot td { font-weight: 700; background: #fafcfc; }
 
+@media (max-width: 760px) {
+  table.t.resp thead { display: none; }
+  table.t.resp, table.t.resp tbody, table.t.resp tr, table.t.resp td, table.t.resp tfoot { display: block; width: 100%; }
+  table.t.resp tbody tr { border-top: 1px solid var(--borda); padding: .6rem .7rem; display: grid; grid-template-columns: 1fr 1fr; gap: .2rem .6rem; }
+  table.t.resp td { border: 0; padding: .1rem 0; }
+  table.t.resp td[data-l]::before { content: attr(data-l); display: block; font-size: .72rem; color: var(--suave); font-weight: 600; }
+  table.t.resp td[data-l="Descrição"], table.t.resp td.acoes-td, table.t.resp td.sel-td { grid-column: 1 / -1; }
+  table.t.resp td.num { text-align: left; font-weight: 700; }
+  table.t.resp tfoot tr { display: flex; justify-content: space-between; padding: .6rem .7rem; }
+  table.t.resp tfoot td { padding: 0; }
+  .tabela-wrap:has(.resp) { overflow: visible; }
+}
+.sel-td .check { font-weight: 400; font-size: .85rem; }
+@media (min-width: 761px) { .sel-td .check { font-size: 0; } }
+
 /* Status */
 .st { display: inline-block; padding: .1rem .5rem; border-radius: 99px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
 .st-rascunho { background: #eceff1; color: #546e7a; }

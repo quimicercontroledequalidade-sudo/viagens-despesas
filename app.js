@@ -331,7 +331,7 @@ async function telaViagem(id) {
         ${meusRasc.length ? `<button class="btn ok" id="b-env">Enviar ${meusRasc.length} para aprovação</button>` : ''}
         ${participa && v.status === 'aberta' ? '<button class="btn" id="b-desp">+ Despesa</button>' : ''}
       </div></div>
-    ${desp.length ? `<div class="tabela-wrap"><table class="t">
+    ${desp.length ? `<div class="tabela-wrap"><table class="t resp">
       <thead><tr><th>Data</th><th>Descrição / comprovantes</th><th>Categoria</th><th>Lançado por</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
       <tbody>${desp.map((d) => linhaDespesa(d)).join('')}</tbody>
       <tfoot><tr><td colspan="4">Total (sem recusadas)<div class="peq suave" style="font-weight:400">
@@ -370,16 +370,16 @@ function linhaDespesa(d, extra = '') {
   if (eFin() && d.status === 'aprovada') botoes.push(`<button class="btn peq" data-acao="pagar" data-id="${d.id}">Marcar paga</button>`);
   botoes.push(`<button class="btn peq link" data-acao="historico" data-id="${d.id}">Histórico</button>`);
   return `<tr>
-    <td>${dataBR(d.data)}</td>
-    <td>${esc(d.descricao || '')}
+    <td data-l="Data">${dataBR(d.data)}</td>
+    <td data-l="Descrição">${esc(d.descricao || '')}
       <div class="anexos">${(d.anexos || []).map((a) => `<button class="anexo" data-anexo="${esc(a.caminho)}" data-tipo="${esc(a.tipo_arquivo || '')}">📎 ${esc(a.nome_arquivo.slice(0, 22))}</button>`).join('') || (d.status === 'rascunho' || d.status === 'recusada' ? '<span class="peq suave">sem comprovante</span>' : '')}</div>
       ${d.status === 'recusada' && d.motivo_recusa ? `<div class="peq" style="color:var(--perigo)">Motivo: ${esc(d.motivo_recusa)}</div>` : ''}
     </td>
-    <td>${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div></td>
-    <td>${esc(nomePerfil(d.colaborador_id))}${extra}</td>
-    <td class="num">${brl(d.valor)}</td>
-    <td>${stBadge(d.status)}</td>
-    <td><div class="linha">${botoes.join('')}</div></td></tr>`;
+    <td data-l="Categoria">${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div></td>
+    <td data-l="Lançado por">${esc(nomePerfil(d.colaborador_id))}${extra}</td>
+    <td data-l="Valor" class="num">${brl(d.valor)}</td>
+    <td data-l="Situação">${stBadge(d.status)}</td>
+    <td class="acoes-td"><div class="linha">${botoes.join('')}</div></td></tr>`;
 }
 
 function ligarAcoesDespesa(lista, recarregar) {
@@ -668,8 +668,8 @@ async function telaAprovacao(aba) {
       ${['enviada', 'aprovada'].includes(aba) ? `<div class="linha entre" style="margin-bottom:.6rem">
         <label class="check"><input type="checkbox" id="sel-todas"> Selecionar todas</label>
         <button class="btn ${aba === 'enviada' ? 'ok' : ''}" id="b-lote" disabled>${aba === 'enviada' ? 'Aprovar selecionadas' : 'Marcar selecionadas como pagas'}</button></div>` : ''}
-      <div class="tabela-wrap"><table class="t"><thead><tr>${['enviada', 'aprovada'].includes(aba) ? '<th></th>' : ''}<th>Data</th><th>Descrição / comprovantes</th><th>Categoria</th><th>Colaborador / viagem</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
-      <tbody>${lista.map((d) => (['enviada', 'aprovada'].includes(aba) ? `<tr><td><input type="checkbox" class="sel" value="${d.id}"></td>` : '<tr>') +
+      <div class="tabela-wrap"><table class="t resp"><thead><tr>${['enviada', 'aprovada'].includes(aba) ? '<th></th>' : ''}<th>Data</th><th>Descrição / comprovantes</th><th>Categoria</th><th>Colaborador / viagem</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+      <tbody>${lista.map((d) => (['enviada', 'aprovada'].includes(aba) ? `<tr><td class="sel-td"><label class="check" style="margin:0"><input type="checkbox" class="sel" value="${d.id}"> selecionar</label></td>` : '<tr>') +
         linhaDespesa(d, `<div class="peq"><a href="#/viagem/${d.viagem_id}">${esc(d.viagens?.titulo || d.viagens?.destino || '')}</a></div>`).slice(4)).join('')}</tbody>
       <tfoot><tr>${['enviada', 'aprovada'].includes(aba) ? '<td></td>' : ''}<td colspan="4">Total</td><td class="num">${brl(total)}</td><td colspan="2"></td></tr></tfoot></table></div>`
       : '<div class="vazio card">Nada por aqui.</div>'}`;
