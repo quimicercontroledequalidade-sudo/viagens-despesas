@@ -150,6 +150,51 @@
     return data.text || '';
   }
 
-  const api = { interpretar, lerImagem, sugerirCategoria };
+  // ----- PDF: usa o texto do próprio arquivo (nota eletrônica) ou lê a imagem da 1ª página (digitalizada) -----
+  const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  let _pdfjs = null;
+  function carregarPdfJs() {
+    if (root.pdfjsLib) return Promise.resolve(root.pdfjsLib);
+    if (_pdfjs) return _pdfjs;
+    _pdfjs = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = PDFJS + 'pdf.min.js';
+      s.onload = () => res(root.pdfjsLib); s.onerror = () => { _pdfjs = null; rej(new Error('Não foi possível carregar o leitor de PDF.')); };
+      document.head.appendChild(s);
+    });
+    return _pdfjs;
+  }
+  async function lerPdf(file, aoProgresso) {
+    const pdfjs = await carregarPdfJs();
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const pagina = await doc.getPage(1);
+    // 1) texto embutido, montado linha a linha
+    const tc = await pagina.getTextContent();
+    const linhas = new Map();
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5] / 3) * 3;
+      if (!linhas.has(y)) linhas.set(y, []);
+      linhas.get(y).push([it.transform[4], it.str]);
+    }
+    const texto = [...linhas.entries()].sort((a, b) => b[0] - a[0])
+      .map(([, its]) => its.sort((a, b) => a[0] - b[0]).map((x) => x[1]).join(' ')).join('\n');
+    if ((texto.match(/[A-Za-zÀ-ÿ0-9]/g) || []).length > 40) return texto;
+    // 2) PDF só com imagem: desenha a página e lê como foto
+    const vp = pagina.getViewport({ scale: 2.2 });
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    await pagina.render({ canvasContext: g, viewport: vp }).promise;
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    return lerImagem(new File([blob], 'pagina1.png', { type: 'image/png' }), aoProgresso);
+  }
+  async function lerArquivo(file, aoProgresso) {
+    const pdf = /pdf/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+    return pdf ? lerPdf(file, aoProgresso) : lerImagem(file, aoProgresso);
+  }
+
+  const api = { interpretar, lerImagem, lerPdf, lerArquivo, sugerirCategoria };
   if (typeof module !== 'undefined') module.exports = api; else root.LeitorNota = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.10.30-1';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.10.30-2';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -566,10 +566,10 @@ function formDespesa(v, d = null) {
     ${!novo && d.colaborador_id !== S.eu.id ? `<div class="aviso peq">Você está editando um lançamento de <b>${esc(nomePerfil(d.colaborador_id))}</b>.</div>` : ''}
     ${!novo && ['aprovada', 'paga'].includes(d.status) ? `<div class="aviso peq">Este lançamento já está <b>${esc(ST_DESP[d.status])}</b>. A alteração fica registrada no histórico.</div>` : ''}
     <form id="f-d">
-      <label>1. Foto da nota fiscal / recibo *</label>
-      <input type="file" id="arq" accept="image/*,.heic,.heif" multiple>
+      <label>1. Foto ou PDF da nota fiscal / recibo *</label>
+      <input type="file" id="arq" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple>
       <div class="anexos" id="lista-anexos"></div>
-      <div class="linha" style="margin-top:.35rem"><span class="peq suave" id="ocr-status">Anexe a foto: o app lê a nota e preenche os campos para você conferir.</span>
+      <div class="linha" style="margin-top:.35rem"><span class="peq suave" id="ocr-status">Anexe a foto ou o PDF: o app lê a nota e preenche os campos para você conferir.</span>
         <button type="button" class="btn link peq" id="b-ler" hidden>🔎 Ler a nota de novo</button></div>
       <label>2. Quem pagou?</label>
       <div class="seg" id="seg">${Object.entries(GRUPOS_CURTO).map(([k, t]) => `<button type="button" data-g="${k}">${t}</button>`).join('')}</div>
@@ -628,7 +628,7 @@ function formDespesa(v, d = null) {
     const st = $('#ocr-status', box);
     st.textContent = '🔎 Lendo a nota… (na primeira vez pode levar alguns segundos)';
     try {
-      textoNota = await LeitorNota.lerImagem(file, (p) => { st.textContent = `🔎 Lendo a nota… ${Math.round(p * 100)}%`; });
+      textoNota = await LeitorNota.lerArquivo(file, (p) => { st.textContent = `🔎 Lendo a nota… ${Math.round(p * 100)}%`; });
       const r = LeitorNota.interpretar(textoNota, grupo, hoje());
       const preenchidos = [];
       const pode = (n) => forcar || !editados.has(n);
@@ -656,7 +656,9 @@ function formDespesa(v, d = null) {
     const st = $('#ocr-status', box);
     for (const f of escolhidos) {
       const imagem = (f.type || '').startsWith('image/') || /\.(hei[cf]|jpe?g|png|webp)$/i.test(f.name);
-      if (!imagem) { aviso(`"${f.name}" não é uma imagem. Envie a foto da nota (JPG, PNG ou HEIC).`, true); continue; }
+      const pdf = /pdf/i.test(f.type || '') || /\.pdf$/i.test(f.name);
+      if (!imagem && !pdf) { aviso(`"${f.name}" não é foto nem PDF. Envie a nota em JPG, PNG, HEIC ou PDF.`, true); continue; }
+      if (pdf && f.size > 10 * 1024 * 1024) { aviso(`"${f.name}" tem mais de 10 MB.`, true); continue; }
       if (f.size > 25 * 1024 * 1024) { aviso(`"${f.name}" é muito grande.`, true); continue; }
       if (eHeic(f)) {
         st.textContent = '🔄 Convertendo foto do iPhone (HEIC) para PDF…';
@@ -685,7 +687,7 @@ function formDespesa(v, d = null) {
   $('#f-d', box).onsubmit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
-    if (anexosExist.length + arquivos.length === 0) return aviso('Anexe a foto da nota fiscal ou recibo.', true);
+    if (anexosExist.length + arquivos.length === 0) return aviso('Anexe a foto ou o PDF da nota fiscal / recibo.', true);
     const valor = parseValor(f.valor);
     if (!(valor > 0)) return aviso('Informe um valor válido.', true);
     if (!f.categoria_id) return aviso('Escolha a categoria.', true);
