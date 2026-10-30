@@ -96,6 +96,40 @@ function pedirTexto(titulo, rotulo) {
   });
 }
 
+// ---------- instalar o app (PWA) ----------
+let promptInstalar = null;
+const instalado = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); promptInstalar = e; atualizarInstalar(); });
+window.addEventListener('appinstalled', () => { promptInstalar = null; atualizarInstalar(); aviso('App instalado! Procure o ícone "Despesas".'); });
+function atualizarInstalar() {
+  $$('.b-instalar, #b-instalar-rodape').forEach((b) => { b.hidden = instalado(); b.onclick = instalarApp; });
+}
+async function instalarApp() {
+  if (promptInstalar) {
+    promptInstalar.prompt();
+    await promptInstalar.userChoice.catch(() => null);
+    promptInstalar = null; atualizarInstalar();
+    return;
+  }
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const passos = ios
+    ? ['Abra este endereço no <b>Safari</b>.', 'Toque no botão <b>Compartilhar</b> (quadrado com seta para cima).', 'Escolha <b>Adicionar à Tela de Início</b> e confirme em <b>Adicionar</b>.']
+    : android
+      ? ['Abra este endereço no <b>Chrome</b>.', 'Toque nos <b>três pontinhos ⋮</b> no canto de cima.', 'Escolha <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>).']
+      : ['Use o <b>Google Chrome</b> ou o <b>Microsoft Edge</b>.', 'Na barra de endereço, clique no ícone de <b>instalar</b> (monitor com seta ⤓), à direita.', 'Ou abra o menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar</b> → <b>Instalar página como app</b>.'];
+  abrirModal(`<h3>📲 Instalar o app</h3>
+    <p>O app fica com ícone próprio na tela inicial (celular) ou na área de trabalho (computador) e abre em tela cheia, como um aplicativo.</p>
+    <ol>${passos.map((x) => `<li style="margin:.35rem 0">${x}</li>`).join('')}</ol>
+    <p class="peq suave">Endereço: <b>${esc(location.origin + location.pathname)}</b></p>
+    <div class="acoes"><button class="btn sec" id="b-copiar">Copiar endereço</button><button class="btn" data-fechar>Entendi</button></div>`);
+  $('#b-copiar').onclick = async () => {
+    try { await navigator.clipboard.writeText(location.origin + location.pathname); aviso('Endereço copiado.'); } catch { aviso('Não foi possível copiar.', true); }
+  };
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
 // ---------- dados de apoio ----------
 async function carregarApoio() {
   const [cats, cen, per, eq] = await Promise.all([
@@ -130,7 +164,9 @@ function telaLogin(modo = 'entrar') {
     <div class="linha entre peq" style="margin-top:.8rem">
       ${modo === 'entrar' ? '<button class="btn link" data-m="cadastrar">Criar conta</button><button class="btn link" data-m="esqueci">Esqueci a senha</button>'
         : modo === 'nova' ? '' : '<button class="btn link" data-m="entrar">Voltar para o login</button>'}
-    </div></div></div>`;
+    </div></div>
+    <div style="text-align:center"><button class="btn sec b-instalar">📲 Instalar o app no celular ou computador</button></div></div>`;
+  atualizarInstalar();
   $$('[data-m]', app).forEach((b) => (b.onclick = () => telaLogin(b.dataset.m)));
   $('#f-login').onsubmit = async (e) => {
     e.preventDefault();
@@ -175,7 +211,8 @@ function montarMenu() {
   itens.push(['#/relatorios', 'Relatórios']);
   if (eAdmin()) itens.push(['#/admin', 'Cadastros']);
   itens.push(['#/conta', S.eu.nome ? S.eu.nome.split(' ')[0] : 'Conta']);
-  $('#menu').innerHTML = itens.map(([h, t]) => `<a href="${h}">${esc(t)}</a>`).join('') + '<button id="b-sair">Sair</button>';
+  $('#menu').innerHTML = itens.map(([h, t]) => `<a href="${h}">${esc(t)}</a>`).join('') + '<button class="b-instalar">📲 Instalar</button><button id="b-sair">Sair</button>';
+  atualizarInstalar();
   $('#b-sair').onclick = async () => { await sb.auth.signOut(); };
   $('#btn-menu').onclick = () => $('#menu').classList.toggle('aberto');
 }
@@ -810,7 +847,15 @@ function telaConta() {
     <form class="card" id="f-nome"><label>Nome (aparece no relatório)</label><input name="nome" value="${esc(S.eu.nome)}" required>
       <div class="acoes"><button class="btn">Salvar nome</button></div></form>
     <form class="card" id="f-senha"><label>Nova senha</label><input name="senha" type="password" minlength="6" required autocomplete="new-password">
-      <div class="acoes"><button class="btn">Trocar senha</button></div></form>`;
+      <div class="acoes"><button class="btn">Trocar senha</button></div></form>
+    <div class="card"><h3>Instalar o app</h3>
+      <p class="suave peq">${instalado() ? 'Você já está usando o app instalado. ✅' : 'Baixe o app para ter um ícone na tela inicial do celular ou na área de trabalho do computador.'}</p>
+      <div class="acoes" style="justify-content:flex-start"><button class="btn b-instalar">📲 Instalar app</button></div></div>
+    <div class="card"><h3>Sobre</h3>
+      <p style="margin:.2rem 0">Viagens &amp; Despesas — Quimicer</p>
+      <p style="margin:.2rem 0">Desenvolvedor: <b>Emerson Honorato</b></p>
+      <p style="margin:.2rem 0">Contato: <a href="mailto:emersomhonorato@gmail.com">emersomhonorato@gmail.com</a></p></div>`;
+  atualizarInstalar();
   $('#f-nome').onsubmit = async (e) => {
     e.preventDefault();
     try { const nome = new FormData(e.target).get('nome').trim(); await q(sb.from('perfis').update({ nome }).eq('id', S.eu.id)); S.eu.nome = nome; await carregarApoio(); montarMenu(); marcarMenu(); aviso('Nome salvo.'); }

@@ -163,3 +163,9 @@ table.t tfoot td { font-weight: 700; background: #fafcfc; }
 .rel .b { font-weight: 700; }
 .rel .tit { font-size: 13pt; font-weight: 700; text-align: center; height: 34pt; }
 .rel .info { font-weight: 700; vertical-align: top; height: 24pt; white-space: pre-line; }
+
+/* Rodapé */
+.rodape { text-align: center; color: var(--suave); font-size: .8rem; padding: 1rem 16px 1.5rem; border-top: 1px solid var(--borda); margin-top: 1rem; }
+.rodape a { color: var(--suave); }
+
+[hidden] { display: none !important; }
