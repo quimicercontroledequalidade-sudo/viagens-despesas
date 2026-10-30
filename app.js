@@ -14,6 +14,13 @@ const S = {
 };
 
 const CARGOS = { colaborador: 'Colaborador', gestor: 'Gestor', financeiro: 'Financeiro', admin: 'Administrador', desenvolvedor: 'Desenvolvedor' };
+const CARGOS_DESC = {
+  colaborador: 'Faz viagens, lança despesas e comprovantes. Vê só o que é dele.',
+  gestor: 'Faz viagens e acompanha as viagens e despesas da sua equipe.',
+  financeiro: 'Não faz viagens. Recebe os relatórios, aprova, recusa e marca como pago.',
+  admin: 'Tudo, mais os cadastros de usuários, equipes e centros de custo.',
+  desenvolvedor: 'Acima do administrador.',
+};
 const GRUPOS = { funcionario: 'Restituir ao funcionário', empresa: 'Pago pela empresa (cartão)', diversos: 'Diversos' };
 const GRUPOS_CURTO = { funcionario: 'Eu paguei', empresa: 'Empresa / cartão', diversos: 'Diversos' };
 const ST_DESP = { rascunho: 'Rascunho', enviada: 'Enviada', aprovada: 'Aprovada', recusada: 'Recusada', paga: 'Paga' };
@@ -29,6 +36,7 @@ const hoje = () => new Date().toLocaleDateString('sv-SE');
 const eDev = () => S.eu?.cargo === 'desenvolvedor';
 const eAdmin = () => ['admin', 'desenvolvedor'].includes(S.eu?.cargo);
 const eFin = () => ['financeiro', 'admin', 'desenvolvedor'].includes(S.eu?.cargo);
+const eFinPuro = () => S.eu?.cargo === 'financeiro';
 const eGestor = () => ['gestor', 'admin', 'desenvolvedor'].includes(S.eu?.cargo);
 const LINK_CADASTRO = () => location.origin + location.pathname + '#/cadastro';
 const stBadge = (s, mapa = ST_DESP) => `<span class="st st-${esc(s)}">${esc(mapa[s] || s)}</span>`;
@@ -208,7 +216,7 @@ function telaAguardando() {
 // ---------- menu e rotas ----------
 function montarMenu() {
   $('#topo').hidden = false;
-  const itens = [['#/viagens', 'Viagens']];
+  const itens = [['#/viagens', eFinPuro() ? 'Relatórios de viagem' : 'Viagens']];
   if (eFin()) itens.push(['#/aprovacao', 'Aprovação']);
   itens.push(['#/relatorios', 'Relatórios']);
   if (eAdmin()) itens.push(['#/admin', 'Cadastros']);
@@ -243,7 +251,7 @@ window.addEventListener('hashchange', rotear);
 
 // ---------- VIAGENS (lista) ----------
 async function telaViagens() {
-  const filtro = sessionStorage.getItem('filtroViagens') || (S.eu.cargo === 'colaborador' ? 'minhas' : 'todas');
+  const filtro = eFinPuro() ? 'todas' : (sessionStorage.getItem('filtroViagens') || (S.eu.cargo === 'colaborador' ? 'minhas' : 'todas'));
   const viagens = await q(sb.from('viagens')
     .select('*, centros_custo(nome, codigo), viagem_participantes(perfil_id)')
     .order('data_inicio', { ascending: false }));
@@ -255,9 +263,10 @@ async function telaViagens() {
     if (d.status === 'enviada') pend[d.viagem_id] = (pend[d.viagem_id] || 0) + 1;
   });
   const lista = viagens.filter((v) => filtro === 'todas' || v.viagem_participantes.some((p) => p.perfil_id === S.eu.id));
-  const veTodas = S.eu.cargo !== 'colaborador';
+  const veTodas = S.eu.cargo !== 'colaborador' && !eFinPuro();
   $('#app').innerHTML = `
-    <div class="linha entre"><h1>Viagens</h1><button class="btn" id="b-nova">+ Nova viagem</button></div>
+    <div class="linha entre"><h1>${eFinPuro() ? 'Relatórios de viagem' : 'Viagens'}</h1>${eFinPuro() ? '' : '<button class="btn" id="b-nova">+ Nova viagem</button>'}</div>
+    ${eFinPuro() ? '<p class="suave peq">Abra uma viagem para baixar o relatório (Excel/PDF) e aprovar as despesas.</p>' : ''}
     ${veTodas ? `<div class="abas"><button data-f="minhas" class="${filtro === 'minhas' ? 'on' : ''}">Minhas</button>
       <button data-f="todas" class="${filtro === 'todas' ? 'on' : ''}">${eFin() ? 'Todas' : 'Minha equipe'}</button></div>` : '<div style="height:.8rem"></div>'}
     ${lista.length ? `<div class="grade">${lista.map((v) => `
@@ -269,8 +278,8 @@ async function telaViagens() {
         <div class="linha entre" style="margin-top:.5rem"><span class="total">${brl(tot[v.id])}</span>
         ${pend[v.id] ? `<span class="st st-enviada">${pend[v.id]} aguardando</span>` : ''}</div>
       </a>`).join('')}</div>`
-      : '<div class="vazio card">Nenhuma viagem ainda. Clique em <b>+ Nova viagem</b> para começar.</div>'}`;
-  $('#b-nova').onclick = () => formViagem();
+      : `<div class="vazio card">${eFinPuro() ? 'Nenhuma viagem lançada ainda.' : 'Nenhuma viagem ainda. Clique em <b>+ Nova viagem</b> para começar.'}</div>`}`;
+  $('#b-nova') && ($('#b-nova').onclick = () => formViagem());
   $$('[data-f]').forEach((b) => (b.onclick = () => { sessionStorage.setItem('filtroViagens', b.dataset.f); telaViagens(); }));
 }
 
@@ -339,7 +348,7 @@ async function telaViagem(id) {
   if (!r) { $('#app').innerHTML = '<div class="vazio card">Viagem não encontrada ou sem permissão. <a href="#/viagens">Voltar</a></div>'; return; }
   const { v, desp } = r;
   const participa = v.viagem_participantes.some((p) => p.perfil_id === S.eu.id);
-  const podeEditar = participa || eFin();
+  const podeEditar = (participa && !eFinPuro()) || eAdmin();
   const total = desp.filter((d) => d.status !== 'recusada').reduce((s, d) => s + Number(d.valor), 0);
   const porGrupo = { funcionario: 0, empresa: 0, diversos: 0 };
   desp.filter((d) => d.status !== 'recusada').forEach((d) => (porGrupo[d.categorias.grupo] += Number(d.valor)));
@@ -368,7 +377,7 @@ async function telaViagem(id) {
     <div class="linha entre"><h2>Despesas</h2>
       <div class="linha">
         ${meusRasc.length ? `<button class="btn ok" id="b-env">Enviar ${meusRasc.length} para aprovação</button>` : ''}
-        ${participa && v.status === 'aberta' ? '<button class="btn" id="b-desp">+ Despesa</button>' : ''}
+        ${participa && !eFinPuro() && v.status === 'aberta' ? '<button class="btn" id="b-desp">+ Despesa</button>' : ''}
       </div></div>
     ${desp.length ? `<div class="tabela-wrap"><table class="t resp">
       <thead><tr><th>Data</th><th>Descrição / comprovantes</th><th>Categoria</th><th>Lançado por</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
@@ -475,7 +484,7 @@ async function verAnexo(caminho, tipo, nome) {
 
 async function formParticipantes(v) {
   const atuais = new Set(v.viagem_participantes.map((p) => p.perfil_id));
-  const ativos = S.perfis.filter((p) => p.ativo);
+  const ativos = S.perfis.filter((p) => p.ativo && (p.cargo !== 'financeiro' || atuais.has(p.id)));
   const box = abrirModal(`<h3>Participantes da viagem</h3>
     <p class="suave peq">Todos os participantes podem lançar despesas nesta viagem e saem no cabeçalho do relatório.</p>
     ${ativos.map((p) => `<label class="check"><input type="checkbox" value="${p.id}" ${atuais.has(p.id) ? 'checked' : ''}
@@ -793,11 +802,14 @@ async function telaAdmin(aba) {
         <a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Olá! Crie sua conta no app de Viagens & Despesas da Quimicer: ' + LINK_CADASTRO())}">Enviar pelo WhatsApp</a>
         <a class="btn sec" href="mailto:?subject=${encodeURIComponent('Cadastro no app Viagens & Despesas')}&body=${encodeURIComponent('Olá! Crie sua conta no app de Viagens & Despesas da Quimicer pelo link: ' + LINK_CADASTRO() + '\n\nDepois de criar, aguarde a liberação do administrador.')}">Enviar por e-mail</a>
       </div></div>
-      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th></tr></thead><tbody>
+      <details class="card"><summary><b>O que cada cargo pode fazer</b></summary>
+        ${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev()).map(([k, t]) => `<div class="peq" style="margin:.3rem 0"><b>${t}:</b> ${CARGOS_DESC[k]}</div>`).join('')}</details>
+      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th>${eDev() ? '<th>Pode trocar a própria função</th>' : ''}</tr></thead><tbody>
       ${S.perfis.map((p) => `<tr data-p="${p.id}"><td><input data-c="nome" value="${esc(p.nome)}" style="min-width:160px"></td><td>${esc(p.email)}</td>
         <td><select data-c="cargo" ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled title="Sem permissão para mudar este cargo"' : ''}>${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev() || p.cargo === 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
         <td><select data-c="equipe_id"><option value="">—</option>${S.equipes.map((e) => `<option value="${e.id}" ${e.id === p.equipe_id ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></td>
-        <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td></tr>`).join('')}
+        <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td>
+        ${eDev() ? `<td><input type="checkbox" data-c="pode_trocar_funcao" ${p.pode_trocar_funcao ? 'checked' : ''} ${p.cargo === 'desenvolvedor' ? 'disabled' : ''}></td>` : ''}</tr>`).join('')}
       </tbody></table></div>`;
   } else if (aba === 'equipes') {
     const gestores = S.perfis.filter((p) => p.ativo && ['gestor', 'admin', 'desenvolvedor'].includes(p.cargo));
@@ -858,6 +870,11 @@ function telaConta() {
       <div><label>E-mail</label><div>${esc(S.eu.email)}</div></div>
       <div><label>Cargo</label><div>${esc(CARGOS[S.eu.cargo])}</div></div>
       <div><label>Equipe</label><div>${esc(S.equipes.find((e) => e.id === S.eu.equipe_id)?.nome || '—')}</div></div></div></div>
+    ${S.eu.pode_trocar_funcao ? `<div class="card"><h3>Trocar minha função</h3>
+      <p class="suave peq" style="margin:.2rem 0 .3rem">Você pode mudar sua função quando quiser e voltar depois.</p>
+      <div class="linha"><select id="sel-funcao" style="max-width:260px">${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === S.eu.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <button class="btn" id="b-funcao">Trocar</button></div>
+      <p class="peq suave" id="desc-funcao" style="margin:.4rem 0 0">${esc(CARGOS_DESC[S.eu.cargo] || '')}</p></div>` : ''}
     <form class="card" id="f-nome"><label>Nome (aparece no relatório)</label><input name="nome" value="${esc(S.eu.nome)}" required>
       <div class="acoes"><button class="btn">Salvar nome</button></div></form>
     <form class="card" id="f-senha"><label>Nova senha</label><input name="senha" type="password" minlength="6" required autocomplete="new-password">
@@ -870,6 +887,18 @@ function telaConta() {
       <p style="margin:.2rem 0">Desenvolvedor: <b>Emerson Honorato</b></p>
       <p style="margin:.2rem 0">Contato: <a href="mailto:emersomhonorato@gmail.com">emersomhonorato@gmail.com</a></p></div>`;
   atualizarInstalar();
+  if ($('#b-funcao')) {
+    $('#sel-funcao').onchange = (e) => ($('#desc-funcao').textContent = CARGOS_DESC[e.target.value] || '');
+    $('#b-funcao').onclick = async () => {
+      const novo = $('#sel-funcao').value;
+      if (novo === S.eu.cargo) return aviso('Você já está nessa função.');
+      try {
+        await q(sb.from('perfis').update({ cargo: novo }).eq('id', S.eu.id));
+        await carregarEu(); await carregarApoio(); montarMenu(); telaConta(); marcarMenu();
+        aviso('Agora você está como ' + CARGOS[S.eu.cargo] + '.');
+      } catch (err) { erro(err); }
+    };
+  }
   $('#f-nome').onsubmit = async (e) => {
     e.preventDefault();
     try { const nome = new FormData(e.target).get('nome').trim(); await q(sb.from('perfis').update({ nome }).eq('id', S.eu.id)); S.eu.nome = nome; await carregarApoio(); montarMenu(); marcarMenu(); aviso('Nome salvo.'); }
@@ -893,7 +922,7 @@ async function iniciar() {
     if (!S.eu || !S.eu.ativo) return telaAguardando();
     await carregarApoio();
     montarMenu();
-    if (!location.hash || location.hash === '#') location.hash = '#/viagens'; else rotear();
+    if (!location.hash || location.hash === '#' || location.hash.startsWith('#/cadastro')) location.hash = eFinPuro() ? '#/aprovacao' : '#/viagens'; else rotear();
   } catch (e) { erro(e); telaLogin('entrar'); }
 }
 
