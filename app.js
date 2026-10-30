@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.10.30-3';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.10.30-4';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -1000,12 +1000,13 @@ async function telaAdmin(aba) {
       </div></div>
       <details class="card"><summary><b>O que cada cargo pode fazer</b></summary>
         ${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev()).map(([k, t]) => `<div class="peq" style="margin:.3rem 0"><b>${t}:</b> ${CARGOS_DESC[k]}</div>`).join('')}</details>
-      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th>${eDev() ? '<th>Pode trocar a própria função</th>' : ''}</tr></thead><tbody>
+      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th>${eDev() ? '<th>Pode trocar a própria função</th><th></th>' : ''}</tr></thead><tbody>
       ${S.perfis.map((p) => `<tr data-p="${p.id}"><td><input data-c="nome" value="${esc(p.nome)}" style="min-width:160px"></td><td>${esc(p.email)}</td>
         <td><select data-c="cargo" ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled title="Sem permissão para mudar este cargo"' : ''}>${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev() || p.cargo === 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
         <td><select data-c="equipe_id"><option value="">—</option>${S.equipes.map((e) => `<option value="${e.id}" ${e.id === p.equipe_id ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></td>
         <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td>
-        ${eDev() ? `<td><input type="checkbox" data-c="pode_trocar_funcao" ${p.pode_trocar_funcao ? 'checked' : ''} ${p.cargo === 'desenvolvedor' ? 'disabled' : ''}></td>` : ''}</tr>`).join('')}
+        ${eDev() ? `<td><input type="checkbox" data-c="pode_trocar_funcao" ${p.pode_trocar_funcao ? 'checked' : ''} ${p.cargo === 'desenvolvedor' ? 'disabled' : ''}></td>
+          <td>${p.id === S.eu.id ? '' : `<button class="btn peq sec" data-excluir-usuario="${p.id}">🗑 Excluir</button>`}</td>` : ''}</tr>`).join('')}
       </tbody></table></div>`;
   } else if (aba === 'equipes') {
     const gestores = S.perfis.filter((p) => p.ativo && ['gestor', 'admin', 'desenvolvedor'].includes(p.cargo));
@@ -1034,6 +1035,7 @@ async function telaAdmin(aba) {
   }
   $('#app').innerHTML = html;
   $$('[data-ab]').forEach((b) => (b.onclick = () => (location.hash = '#/admin/' + b.dataset.ab)));
+  $$('[data-excluir-usuario]').forEach((b) => (b.onclick = () => excluirUsuario(S.perfis.find((x) => x.id === b.dataset.excluirUsuario))));
   const bcl = $('#b-copiar-link');
   if (bcl) bcl.onclick = async () => {
     try { await navigator.clipboard.writeText(LINK_CADASTRO()); aviso('Link copiado.'); }
@@ -1057,6 +1059,33 @@ async function telaAdmin(aba) {
     try { await q(sb.from(aba === 'equipes' ? 'equipes' : 'centros_custo').insert(f)); aviso('Adicionado.'); telaAdmin(aba); }
     catch (err) { erro(/duplicate key/.test(err.message) ? new Error('Já existe um cadastro com esse nome/código.') : err); }
   };
+}
+
+// Excluir usuário (somente Desenvolvedor)
+async function excluirUsuario(p) {
+  if (!p) return;
+  const nome = p.nome || p.email;
+  try {
+    if (!(await confirmar(`Excluir o usuário ${nome} (${p.email})? A conta de acesso é apagada e a pessoa não consegue mais entrar.`, 'Excluir usuário', true))) return;
+    let r = await q(sb.rpc('excluir_usuario', { p_id: p.id, p_apagar_dados: false }));
+    if (r.precisa_confirmar) {
+      const partes = [];
+      if (r.viagens) partes.push(`${r.viagens} viagem(ns) criada(s) por ele`);
+      if (r.despesas) partes.push(`${r.despesas} despesa(s) lançada(s) por ele`);
+      if (r.despesas_de_outros) partes.push(`${r.despesas_de_outros} despesa(s) de outras pessoas dentro dessas viagens`);
+      if (!(await confirmar(`${nome} tem lançamentos: ${partes.join(', ')}. Tudo isso, com os comprovantes, será APAGADO junto. Se quiser manter o histórico, cancele e apenas desmarque "Liberado". Apagar mesmo assim?`, 'Apagar tudo', true))) return;
+      // apaga os arquivos dos comprovantes antes
+      const viagensDele = await q(sb.from('viagens').select('id').eq('colaborador_id', p.id));
+      const idsV = viagensDele.map((v) => v.id);
+      let desp = await q(sb.from('despesas').select('id, anexos(caminho)').eq('colaborador_id', p.id));
+      if (idsV.length) desp = desp.concat(await q(sb.from('despesas').select('id, anexos(caminho)').in('viagem_id', idsV)));
+      const caminhos = [...new Set(desp.flatMap((d) => (d.anexos || []).map((a) => a.caminho)))];
+      for (let i = 0; i < caminhos.length; i += 100) await sb.storage.from(BUCKET).remove(caminhos.slice(i, i + 100));
+      r = await q(sb.rpc('excluir_usuario', { p_id: p.id, p_apagar_dados: true }));
+    }
+    aviso(`Usuário ${nome} excluído.`);
+    telaAdmin('usuarios');
+  } catch (e) { erro(e); }
 }
 
 // ---------- CONTA ----------
