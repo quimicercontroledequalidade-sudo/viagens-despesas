@@ -623,15 +623,14 @@ function dadosRelatorio(v, desp) {
   };
 }
 
-let _modelo = null, _logo = null;
+let _modelo = null;
 async function baixarExcel(v, desp) {
   try {
     const dados = dadosRelatorio(v, desp);
     if (dados.pendentes && !(await confirmar(`Há ${dados.pendentes} despesa(s) em rascunho. Elas entram no relatório. Continuar?`, 'Gerar'))) return;
     aviso('Gerando Excel…');
     if (!_modelo) _modelo = await (await fetch('modelo_relatorio.xlsx', { cache: 'no-cache' })).arrayBuffer();
-    if (!_logo) _logo = await (await fetch('logo_quimicer.png')).arrayBuffer();
-    const buf = await Relatorio.gerarExcel(ExcelJS, _modelo, dados, _logo);
+    const buf = await Relatorio.gerarExcel(JSZip, _modelo, dados);
     baixarArquivo(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), Relatorio.nomeAba(dados.titulo) + '.xlsx');
   } catch (e) { erro(e); }
 }
