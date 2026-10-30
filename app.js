@@ -13,7 +13,7 @@ const S = {
   recuperandoSenha: false,
 };
 
-const CARGOS = { colaborador: 'Colaborador', gestor: 'Gestor', financeiro: 'Financeiro', admin: 'Administrador' };
+const CARGOS = { colaborador: 'Colaborador', gestor: 'Gestor', financeiro: 'Financeiro', admin: 'Administrador', desenvolvedor: 'Desenvolvedor' };
 const GRUPOS = { funcionario: 'Restituir ao funcionário', empresa: 'Pago pela empresa (cartão)', diversos: 'Diversos' };
 const GRUPOS_CURTO = { funcionario: 'Eu paguei', empresa: 'Empresa / cartão', diversos: 'Diversos' };
 const ST_DESP = { rascunho: 'Rascunho', enviada: 'Enviada', aprovada: 'Aprovada', recusada: 'Recusada', paga: 'Paga' };
@@ -26,9 +26,11 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataBR = (iso) => (iso ? Relatorio.dataBR(iso) : '');
 const hoje = () => new Date().toLocaleDateString('sv-SE');
-const eAdmin = () => S.eu?.cargo === 'admin';
-const eFin = () => ['financeiro', 'admin'].includes(S.eu?.cargo);
-const eGestor = () => ['gestor', 'admin'].includes(S.eu?.cargo);
+const eDev = () => S.eu?.cargo === 'desenvolvedor';
+const eAdmin = () => ['admin', 'desenvolvedor'].includes(S.eu?.cargo);
+const eFin = () => ['financeiro', 'admin', 'desenvolvedor'].includes(S.eu?.cargo);
+const eGestor = () => ['gestor', 'admin', 'desenvolvedor'].includes(S.eu?.cargo);
+const LINK_CADASTRO = () => location.origin + location.pathname + '#/cadastro';
 const stBadge = (s, mapa = ST_DESP) => `<span class="st st-${esc(s)}">${esc(mapa[s] || s)}</span>`;
 const nomePerfil = (id) => { const p = S.perfis.find((x) => x.id === id); return p ? (p.nome || p.email) : '—'; };
 const parseValor = (s) => {
@@ -155,7 +157,7 @@ function telaLogin(modo = 'entrar') {
     <div class="logo"><img src="logo_quimicer.png" alt="Quimicer"><h1>Viagens &amp; Despesas</h1></div>
     <div class="card"><h2 style="margin-top:0">${titulos[modo]}</h2>
     <form id="f-login">
-      ${modo === 'cadastrar' ? '<label>Nome completo</label><input name="nome" required autocomplete="name">' : ''}
+      ${modo === 'cadastrar' ? '<p class="peq suave" style="margin:0">Depois de criar a conta, aguarde o administrador liberar o seu acesso.</p><label>Nome completo</label><input name="nome" required autocomplete="name">' : ''}
       ${modo !== 'nova' ? '<label>E-mail</label><input name="email" type="email" required autocomplete="email">' : ''}
       ${modo === 'entrar' || modo === 'cadastrar' || modo === 'nova'
         ? `<label>${modo === 'nova' ? 'Nova senha' : 'Senha'}</label><input name="senha" type="password" required minlength="6" autocomplete="${modo === 'entrar' ? 'current-password' : 'new-password'}">` : ''}
@@ -783,15 +785,22 @@ async function telaAdmin(aba) {
   const abas = { usuarios: 'Usuários', equipes: 'Equipes', centros: 'Centros de custo / clientes', categorias: 'Categorias' };
   let html = `<h1>Cadastros</h1><div class="abas">${Object.entries(abas).map(([k, t]) => `<button data-ab="${k}" class="${k === aba ? 'on' : ''}">${t}${k === 'usuarios' && S.perfis.some((p) => !p.ativo) ? `<span class="cont">${S.perfis.filter((p) => !p.ativo).length}</span>` : ''}</button>`).join('')}</div>`;
   if (aba === 'usuarios') {
-    html += `<p class="suave peq">Cada pessoa cria a própria conta na tela de login. Depois disso, ela aparece aqui como <b>aguardando</b>: defina o cargo, a equipe e marque <b>Liberado</b>.</p>
+    html += `<div class="card"><h3>🔗 Link de cadastro para novos colaboradores</h3>
+      <p class="suave peq" style="margin:.2rem 0 .5rem">Envie este link. A pessoa abre, cria a conta e aparece aqui como <b>aguardando</b>: defina o cargo, a equipe e marque <b>Liberado</b>.</p>
+      <input id="link-cad" readonly value="${esc(LINK_CADASTRO())}" onclick="this.select()">
+      <div class="acoes" style="justify-content:flex-start">
+        <button class="btn" id="b-copiar-link">Copiar link</button>
+        <a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Olá! Crie sua conta no app de Viagens & Despesas da Quimicer: ' + LINK_CADASTRO())}">Enviar pelo WhatsApp</a>
+        <a class="btn sec" href="mailto:?subject=${encodeURIComponent('Cadastro no app Viagens & Despesas')}&body=${encodeURIComponent('Olá! Crie sua conta no app de Viagens & Despesas da Quimicer pelo link: ' + LINK_CADASTRO() + '\n\nDepois de criar, aguarde a liberação do administrador.')}">Enviar por e-mail</a>
+      </div></div>
       <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th></tr></thead><tbody>
       ${S.perfis.map((p) => `<tr data-p="${p.id}"><td><input data-c="nome" value="${esc(p.nome)}" style="min-width:160px"></td><td>${esc(p.email)}</td>
-        <td><select data-c="cargo" ${p.id === S.eu.id ? 'disabled title="Você não pode mudar o próprio cargo"' : ''}>${Object.entries(CARGOS).map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+        <td><select data-c="cargo" ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled title="Sem permissão para mudar este cargo"' : ''}>${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev() || p.cargo === 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
         <td><select data-c="equipe_id"><option value="">—</option>${S.equipes.map((e) => `<option value="${e.id}" ${e.id === p.equipe_id ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></td>
-        <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td></tr>`).join('')}
+        <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td></tr>`).join('')}
       </tbody></table></div>`;
   } else if (aba === 'equipes') {
-    const gestores = S.perfis.filter((p) => p.ativo && ['gestor', 'admin'].includes(p.cargo));
+    const gestores = S.perfis.filter((p) => p.ativo && ['gestor', 'admin', 'desenvolvedor'].includes(p.cargo));
     html += `<p class="suave peq">O gestor vê as viagens e despesas das pessoas da equipe dele. Só aparecem aqui usuários com cargo Gestor ou Administrador.</p>
       <form class="card linha" id="f-novo"><input name="nome" placeholder="Nome da nova equipe" required style="flex:1;min-width:180px"><button class="btn">Adicionar</button></form>
       <div class="tabela-wrap"><table class="t"><thead><tr><th>Equipe</th><th>Gestor</th><th>Pessoas</th><th>Ativa</th></tr></thead><tbody>
@@ -817,6 +826,11 @@ async function telaAdmin(aba) {
   }
   $('#app').innerHTML = html;
   $$('[data-ab]').forEach((b) => (b.onclick = () => (location.hash = '#/admin/' + b.dataset.ab)));
+  const bcl = $('#b-copiar-link');
+  if (bcl) bcl.onclick = async () => {
+    try { await navigator.clipboard.writeText(LINK_CADASTRO()); aviso('Link copiado.'); }
+    catch { $('#link-cad').select(); aviso('Selecione e copie o link.', true); }
+  };
 
   const tabelas = { p: 'perfis', e: 'equipes', cc: 'centros_custo', cat: 'categorias' };
   $$('[data-c]').forEach((el) => (el.onchange = async () => {
@@ -874,7 +888,7 @@ async function iniciar() {
     const { data } = await sb.auth.getSession();
     S.sessao = data.session;
     if (S.recuperandoSenha) return telaLogin('nova');
-    if (!S.sessao) return telaLogin('entrar');
+    if (!S.sessao) return telaLogin(location.hash.startsWith('#/cadastro') ? 'cadastrar' : 'entrar');
     await carregarEu();
     if (!S.eu || !S.eu.ativo) return telaAguardando();
     await carregarApoio();
