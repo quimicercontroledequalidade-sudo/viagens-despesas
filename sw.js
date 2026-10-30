@@ -1,6 +1,6 @@
 // Service worker: permite instalar o app e abrir a tela mesmo com internet fraca.
 // Sempre tenta buscar a versão nova primeiro; usa a cópia salva só se estiver sem conexão.
-const CACHE = 'viagens-despesas-v8';
+const CACHE = 'viagens-despesas-v9';
 const ARQUIVOS = ['./', 'index.html', 'app.js', 'styles.css', 'relatorio.js', 'leitor_nota.js', 'modelo_relatorio.xlsx',
   'logo_quimicer.png', 'icone-192.png', 'icone-512.png', 'manifest.json'];
 
@@ -14,6 +14,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return; // dados do Supabase nunca ficam salvos aqui
+  if (url.pathname.endsWith('versao.json')) return; // sempre direto do servidor
   e.respondWith(
     fetch(e.request)
       .then((r) => { const copia = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); return r; })

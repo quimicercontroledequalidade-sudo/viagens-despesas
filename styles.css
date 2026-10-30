@@ -173,3 +173,6 @@ table.t tfoot td { font-weight: 700; background: #fafcfc; }
 .rodape a { color: var(--suave); }
 
 [hidden] { display: none !important; }
+
+/* Aviso de versão nova */
+.faixa-versao { position: sticky; top: 0; z-index: 20; background: #fff3cd; color: #5c4a00; text-align: center; padding: .45rem 16px; font-size: .9rem; display: flex; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px solid #f3d27a; }

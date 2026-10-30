@@ -4,6 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
+const APP_VERSAO = '2026.10.30-1';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -140,6 +141,38 @@ async function instalarApp() {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+// ---------- atualizar o app ----------
+const ARQS_APP = ['./', 'index.html', 'app.js', 'styles.css', 'relatorio.js', 'leitor_nota.js', 'modelo_relatorio.xlsx', 'manifest.json', 'sw.js', 'versao.json'];
+async function atualizarApp() {
+  aviso('🔄 Atualizando o app…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.update().catch(() => {})));
+    }
+    if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); }
+    await Promise.all(ARQS_APP.map((a) => fetch(a, { cache: 'reload' }).catch(() => {})));
+  } catch (e) { console.error(e); }
+  location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+}
+async function verificarVersao() {
+  try {
+    const r = await fetch('versao.json?x=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const { versao } = await r.json();
+    if (versao && versao !== APP_VERSAO && !$('#faixa-versao')) {
+      const f = document.createElement('div');
+      f.id = 'faixa-versao'; f.className = 'faixa-versao';
+      f.innerHTML = `Há uma versão nova do app. <button class="btn peq">🔄 Atualizar agora</button>`;
+      f.querySelector('button').onclick = atualizarApp;
+      document.body.prepend(f);
+    }
+  } catch { /* sem internet: tenta depois */ }
+}
+setTimeout(verificarVersao, 3000);
+setInterval(verificarVersao, 30 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
+
 // ---------- dados de apoio ----------
 async function carregarApoio() {
   const [cats, cen, per, eq] = await Promise.all([
@@ -175,7 +208,9 @@ function telaLogin(modo = 'entrar') {
       ${modo === 'entrar' ? '<button class="btn link" data-m="cadastrar">Criar conta</button><button class="btn link" data-m="esqueci">Esqueci a senha</button>'
         : modo === 'nova' ? '' : '<button class="btn link" data-m="entrar">Voltar para o login</button>'}
     </div></div>
-    <div style="text-align:center"><button class="btn sec b-instalar">📲 Instalar o app no celular ou computador</button></div></div>`;
+    <div style="text-align:center"><button class="btn sec b-instalar">📲 Instalar o app no celular ou computador</button>
+      <div><button class="btn link peq" id="b-atualizar-login">🔄 Atualizar app</button></div></div></div>`;
+  $('#b-atualizar-login').onclick = atualizarApp;
   atualizarInstalar();
   $$('[data-m]', app).forEach((b) => (b.onclick = () => telaLogin(b.dataset.m)));
   $('#f-login').onsubmit = async (e) => {
@@ -221,7 +256,8 @@ function montarMenu() {
   itens.push(['#/relatorios', 'Relatórios']);
   if (eAdmin()) itens.push(['#/admin', 'Cadastros']);
   itens.push(['#/conta', S.eu.nome ? S.eu.nome.split(' ')[0] : 'Conta']);
-  $('#menu').innerHTML = itens.map(([h, t]) => `<a href="${h}">${esc(t)}</a>`).join('') + '<button class="b-instalar">📲 Instalar</button><button id="b-sair">Sair</button>';
+  $('#menu').innerHTML = itens.map(([h, t]) => `<a href="${h}">${esc(t)}</a>`).join('') + '<button class="b-instalar">📲 Instalar</button><button class="b-atualizar">🔄 Atualizar</button><button id="b-sair">Sair</button>';
+  $$('.b-atualizar').forEach((b) => (b.onclick = atualizarApp));
   atualizarInstalar();
   $('#b-sair').onclick = async () => { await sb.auth.signOut(); };
   $('#btn-menu').onclick = () => $('#menu').classList.toggle('aberto');
@@ -1039,7 +1075,10 @@ function telaConta() {
     <div class="card"><h3>Sobre</h3>
       <p style="margin:.2rem 0">Viagens &amp; Despesas — Quimicer</p>
       <p style="margin:.2rem 0">Desenvolvedor: <b>Emerson Honorato</b></p>
-      <p style="margin:.2rem 0">Contato: <a href="mailto:emersomhonorato@gmail.com">emersomhonorato@gmail.com</a></p></div>`;
+      <p style="margin:.2rem 0">Contato: <a href="mailto:emersomhonorato@gmail.com">emersomhonorato@gmail.com</a></p>
+      <p style="margin:.2rem 0" class="suave peq">Versão ${APP_VERSAO}</p>
+      <div class="acoes" style="justify-content:flex-start"><button class="btn sec b-atualizar2">🔄 Atualizar app</button></div></div>`;
+  $$('.b-atualizar2').forEach((b) => (b.onclick = atualizarApp));
   atualizarInstalar();
   if ($('#b-funcao')) {
     $('#sel-funcao').onchange = (e) => ($('#desc-funcao').textContent = CARGOS_DESC[e.target.value] || '');
