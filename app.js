@@ -298,7 +298,7 @@ function formViagem(v = null) {
       <div><label>Data de início *</label><input name="data_inicio" type="date" required value="${esc(v.data_inicio)}"></div>
       <div><label>Data de fim</label><input name="data_fim" type="date" value="${esc(v.data_fim)}"></div>
       <div><label>Veículo da empresa</label><input name="veiculo_empresa" value="${esc(v.veiculo_empresa)}" placeholder="Placa/modelo (se houver)"></div>
-      <div><label>Forma de pagamento</label><input name="forma_pagamento" value="${esc(v.forma_pagamento ?? (novo ? 'Cartão corporativo' : ''))}"></div>
+      <div><label>Forma de pagamento padrão</label><input name="forma_pagamento" value="${esc(v.forma_pagamento ?? (novo ? 'Cartão corporativo' : ''))}" title="Sugerida em cada despesa; pode ser trocada em cada lançamento"></div>
       <div><label>KM inicial</label><input name="km_inicial" type="number" min="0" inputmode="numeric" value="${esc(v.km_inicial)}"></div>
       <div><label>KM final</label><input name="km_final" type="number" min="0" inputmode="numeric" value="${esc(v.km_final)}"></div>
       <div class="cheio"><label>Motivo</label><input name="motivo" value="${esc(v.motivo)}"></div>
@@ -353,6 +353,7 @@ async function telaViagem(id) {
   const porGrupo = { funcionario: 0, empresa: 0, diversos: 0 };
   desp.filter((d) => d.status !== 'recusada').forEach((d) => (porGrupo[d.categorias.grupo] += Number(d.valor)));
   const meusRasc = desp.filter((d) => d.colaborador_id === S.eu.id && d.status === 'rascunho');
+  const podeApagarViagem = eAdmin() || (v.colaborador_id === S.eu.id && !desp.some((d) => ['aprovada', 'paga'].includes(d.status)));
 
   $('#app').innerHTML = `
     <div class="peq"><a href="#/viagens">← Viagens</a></div>
@@ -362,7 +363,8 @@ async function telaViagem(id) {
       <div class="linha">
         <button class="btn sec" id="b-xlsx">⬇ Excel</button>
         <button class="btn sec" id="b-pdf">🖨 PDF</button>
-        ${podeEditar ? '<button class="btn sec" id="b-edit">Editar viagem</button>' : ''}
+        ${podeEditar ? '<button class="btn sec" id="b-edit">✏️ Editar viagem</button>' : ''}
+        ${podeApagarViagem ? '<button class="btn sec" id="b-del-v">🗑 Apagar viagem</button>' : ''}
       </div>
     </div>
     <div class="card" style="margin-top:.8rem">
@@ -389,6 +391,16 @@ async function telaViagem(id) {
 
   ligarAcoesDespesa(desp, () => telaViagem(id));
   $('#b-edit') && ($('#b-edit').onclick = () => formViagem(v));
+  $('#b-del-v') && ($('#b-del-v').onclick = async () => {
+    const msg = `Apagar a viagem "${v.titulo || v.destino}"` + (desp.length ? ` e os ${desp.length} lançamento(s) dela, com os comprovantes?` : '?') + ' Isso não pode ser desfeito.';
+    if (!(await confirmar(msg, 'Apagar viagem', true))) return;
+    try {
+      const caminhos = desp.flatMap((d) => d.anexos.map((a) => a.caminho));
+      if (caminhos.length) await sb.storage.from(BUCKET).remove(caminhos);
+      await q(sb.from('viagens').delete().eq('id', v.id));
+      aviso('Viagem apagada.'); location.hash = '#/viagens';
+    } catch (e) { erro(e); }
+  });
   $('#b-desp') && ($('#b-desp').onclick = () => formDespesa(v));
   $('#b-part') && ($('#b-part').onclick = () => formParticipantes(v));
   $('#b-xlsx').onclick = () => baixarExcel(v, desp);
@@ -406,10 +418,10 @@ async function telaViagem(id) {
 
 function linhaDespesa(d, extra = '') {
   const meu = d.colaborador_id === S.eu.id;
-  const editavel = meu && ['rascunho', 'recusada'].includes(d.status);
+  const editavel = (meu && ['rascunho', 'enviada', 'recusada'].includes(d.status)) || eAdmin();
   const botoes = [];
-  if (editavel) botoes.push(`<button class="btn peq sec" data-acao="editar" data-id="${d.id}">Editar</button>`);
-  if (meu && d.status === 'rascunho') botoes.push(`<button class="btn peq sec" data-acao="excluir" data-id="${d.id}">Excluir</button>`);
+  if (editavel) botoes.push(`<button class="btn peq sec" data-acao="editar" data-id="${d.id}">✏️ Editar</button>`);
+  if (editavel) botoes.push(`<button class="btn peq sec" data-acao="excluir" data-id="${d.id}">🗑 Apagar</button>`);
   if (meu && d.status === 'recusada') botoes.push(`<button class="btn peq ok" data-acao="reenviar" data-id="${d.id}">Reenviar</button>`);
   if (eFin() && d.status === 'enviada') {
     botoes.push(`<button class="btn peq ok" data-acao="aprovar" data-id="${d.id}">Aprovar</button>`);
@@ -423,7 +435,7 @@ function linhaDespesa(d, extra = '') {
       <div class="anexos">${(d.anexos || []).map((a) => `<button class="anexo" data-anexo="${esc(a.caminho)}" data-tipo="${esc(a.tipo_arquivo || '')}">📎 ${esc(a.nome_arquivo.slice(0, 22))}</button>`).join('') || (d.status === 'rascunho' || d.status === 'recusada' ? '<span class="peq suave">sem comprovante</span>' : '')}</div>
       ${d.status === 'recusada' && d.motivo_recusa ? `<div class="peq" style="color:var(--perigo)">Motivo: ${esc(d.motivo_recusa)}</div>` : ''}
     </td>
-    <td data-l="Categoria">${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div></td>
+    <td data-l="Categoria">${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div>${d.forma_pagamento ? `<div class="grupo-tag">💳 ${esc(d.forma_pagamento)}</div>` : ''}</td>
     <td data-l="Lançado por">${esc(nomePerfil(d.colaborador_id))}${extra}</td>
     <td data-l="Valor" class="num">${brl(d.valor)}</td>
     <td data-l="Situação">${stBadge(d.status)}</td>
@@ -441,9 +453,9 @@ function ligarAcoesDespesa(lista, recarregar) {
           return formDespesa(v, d);
         }
         case 'excluir':
-          if (!(await confirmar('Excluir esta despesa?', 'Excluir', true))) return;
+          if (!(await confirmar(`Apagar o lançamento "${d.descricao || d.categorias.nome}" de ${brl(d.valor)}? Os comprovantes também serão apagados.`, 'Apagar', true))) return;
           if (d.anexos.length) await sb.storage.from(BUCKET).remove(d.anexos.map((a) => a.caminho));
-          await q(sb.from('despesas').delete().eq('id', d.id)); aviso('Despesa excluída.'); break;
+          await q(sb.from('despesas').delete().eq('id', d.id)); aviso('Lançamento apagado.'); break;
         case 'reenviar':
           await q(sb.from('despesas').update({ status: 'enviada' }).eq('id', d.id)); aviso('Reenviada.'); break;
         case 'aprovar':
@@ -510,29 +522,61 @@ function formDespesa(v, d = null) {
   const anexosExist = d ? [...d.anexos] : [];
   const removidos = [];
   let arquivos = [];
+  let textoNota = '';
+  const editados = new Set(); // campos que a pessoa mexeu à mão (a leitura automática não sobrescreve)
+  // rascunho/recusada: pode salvar como rascunho ou enviar. Enviada/aprovada/paga: só salvar alterações.
+  const fluxoEnvio = novo || ['rascunho', 'recusada'].includes(d.status);
   const box = abrirModal(`<h3>${novo ? 'Nova despesa' : 'Editar despesa'}</h3>
+    ${!novo && d.colaborador_id !== S.eu.id ? `<div class="aviso peq">Você está editando um lançamento de <b>${esc(nomePerfil(d.colaborador_id))}</b>.</div>` : ''}
+    ${!novo && ['aprovada', 'paga'].includes(d.status) ? `<div class="aviso peq">Este lançamento já está <b>${esc(ST_DESP[d.status])}</b>. A alteração fica registrada no histórico.</div>` : ''}
     <form id="f-d">
-      <label>Quem pagou?</label>
+      <label>1. Foto da nota fiscal / recibo *</label>
+      <input type="file" id="arq" accept="image/*,.heic,.heif" multiple>
+      <div class="anexos" id="lista-anexos"></div>
+      <div class="linha" style="margin-top:.35rem"><span class="peq suave" id="ocr-status">Anexe a foto: o app lê a nota e preenche os campos para você conferir.</span>
+        <button type="button" class="btn link peq" id="b-ler" hidden>🔎 Ler a nota de novo</button></div>
+      <label>2. Quem pagou?</label>
       <div class="seg" id="seg">${Object.entries(GRUPOS_CURTO).map(([k, t]) => `<button type="button" data-g="${k}">${t}</button>`).join('')}</div>
       <div class="peq suave" id="g-desc" style="margin-top:.25rem"></div>
       <div class="campos">
         <div><label>Categoria *</label><select name="categoria_id" id="sel-cat" required></select></div>
         <div><label>Data *</label><input name="data" type="date" required value="${esc(d?.data || hoje())}"></div>
         <div><label>Valor (R$) *</label><input name="valor" required inputmode="decimal" placeholder="0,00" value="${d ? String(d.valor).replace('.', ',') : ''}"></div>
+        <div><label>Forma de pagamento</label><input name="forma_pagamento" list="dl-fp" maxlength="60" placeholder="Ex.: Cartão Itaú final 1234" value="${esc(d ? d.forma_pagamento || '' : '')}">
+          <datalist id="dl-fp"></datalist></div>
         <div class="cheio"><label>Descrição</label><input name="descricao" value="${esc(d?.descricao)}" placeholder="Ex.: Almoço com cliente Infibra" maxlength="120"></div>
-        <div class="cheio"><label>Comprovantes (foto ou PDF)</label>
-          <input type="file" id="arq" accept="image/*,application/pdf,.heic,.heif" multiple>
-          <div class="anexos" id="lista-anexos"></div></div>
       </div>
       <div class="acoes"><button type="button" class="btn sec" data-fechar>Cancelar</button>
-        <button class="btn sec" data-envio="rascunho">Salvar rascunho</button>
-        <button class="btn ok" data-envio="enviada">Salvar e enviar</button></div>
+        ${fluxoEnvio ? `<button class="btn sec" data-envio="rascunho">Salvar rascunho</button>
+        <button class="btn ok" data-envio="enviada">Salvar e enviar</button>` : '<button class="btn" data-envio="manter">Salvar alterações</button>'}</div>
     </form>`);
-  const desenharGrupo = () => {
+  const campo = (n) => box.querySelector(`[name="${n}"]`);
+  // sugestões de forma de pagamento: as já usadas + a da viagem + opções comuns
+  (async () => {
+    try {
+      const usadas = await q(sb.from('despesas').select('forma_pagamento, colaborador_id, viagem_id, criado_em').order('criado_em', { ascending: false }).limit(500));
+      const lista = [...new Set([...usadas.map((x) => x.forma_pagamento), v.forma_pagamento, 'Cartão corporativo', 'Cartão pessoal', 'Dinheiro', 'PIX'].filter(Boolean).map((x) => x.trim()))];
+      $('#dl-fp', box).innerHTML = lista.map((x) => `<option value="${esc(x)}">`).join('');
+      if (novo && !campo('forma_pagamento').value) {
+        const ultima = usadas.find((x) => x.viagem_id === v.id && x.colaborador_id === S.eu.id && x.forma_pagamento);
+        campo('forma_pagamento').value = (ultima && ultima.forma_pagamento) || v.forma_pagamento || '';
+      }
+    } catch (e) { console.error(e); }
+  })();
+  ['data', 'valor', 'descricao', 'categoria_id'].forEach((n) => campo(n).addEventListener('input', () => editados.add(n)));
+
+  const desenharGrupo = (catPreferida) => {
     $$('#seg button', box).forEach((b) => b.classList.toggle('on', b.dataset.g === grupo));
     $('#g-desc', box).textContent = GRUPOS[grupo];
+    const atual = catPreferida || campo('categoria_id').value || d?.categoria_id;
     const cats = S.categorias.filter((c) => c.grupo === grupo && (c.ativo || c.id === d?.categoria_id));
-    $('#sel-cat', box).innerHTML = cats.map((c) => `<option value="${c.id}" ${c.id === d?.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+    $('#sel-cat', box).innerHTML = cats.map((c) => `<option value="${c.id}" ${c.id === atual ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+  };
+  const sugerirCategoria = () => {
+    if (!textoNota || editados.has('categoria_id')) return;
+    const nome = LeitorNota.sugerirCategoria(textoNota, grupo);
+    const cat = nome && S.categorias.find((c) => c.grupo === grupo && c.nome === nome && c.ativo);
+    if (cat) campo('categoria_id').value = cat.id;
   };
   const desenharAnexos = () => {
     $('#lista-anexos', box).innerHTML =
@@ -540,43 +584,77 @@ function formDespesa(v, d = null) {
       arquivos.map((f, i) => `<span class="anexo">🆕 ${esc(f.name.slice(0, 24))}<span class="x" data-rn="${i}" title="Remover">✕</span></span>`).join('');
     $$('[data-rx]', box).forEach((x) => (x.onclick = () => { removidos.push(anexosExist.splice(+x.dataset.rx, 1)[0]); desenharAnexos(); }));
     $$('[data-rn]', box).forEach((x) => (x.onclick = () => { arquivos.splice(+x.dataset.rn, 1); desenharAnexos(); }));
+    $('#b-ler', box).hidden = !arquivos.length;
   };
-  $$('#seg button', box).forEach((b) => (b.onclick = () => { grupo = b.dataset.g; desenharGrupo(); }));
+
+  // Lê a foto da nota e preenche os campos (sem apagar o que a pessoa já digitou)
+  const lerNota = async (file, forcar = false) => {
+    const st = $('#ocr-status', box);
+    st.textContent = '🔎 Lendo a nota… (na primeira vez pode levar alguns segundos)';
+    try {
+      textoNota = await LeitorNota.lerImagem(file, (p) => { st.textContent = `🔎 Lendo a nota… ${Math.round(p * 100)}%`; });
+      const r = LeitorNota.interpretar(textoNota, grupo, hoje());
+      const preenchidos = [];
+      const pode = (n) => forcar || !editados.has(n);
+      if (r.data && pode('data')) { campo('data').value = r.data; preenchidos.push('data'); }
+      if (r.valor && pode('valor')) { campo('valor').value = r.valor.toFixed(2).replace('.', ','); preenchidos.push('valor'); }
+      if (r.descricao && pode('descricao') && (forcar || !campo('descricao').value)) { campo('descricao').value = r.descricao; preenchidos.push('descrição'); }
+      if (forcar) editados.delete('categoria_id');
+      const antes = campo('categoria_id').value; sugerirCategoria();
+      if (campo('categoria_id').value !== antes || (r.categoria && preenchidos.length)) preenchidos.push('categoria');
+      ['data', 'valor', 'descricao'].forEach((n) => campo(n).classList.toggle('lido', preenchidos.includes(n === 'descricao' ? 'descrição' : n)));
+      st.innerHTML = preenchidos.length
+        ? `✅ Preenchido pela leitura da nota: <b>${preenchidos.join(', ')}</b>. <b>Confira</b> antes de salvar.`
+        : '⚠️ Não consegui ler os dados desta foto. Preencha os campos (tente uma foto mais nítida, reta e com boa luz).';
+    } catch (e) {
+      console.error(e);
+      st.textContent = '⚠️ Não foi possível ler esta foto automaticamente. Preencha os campos.';
+    }
+  };
+
+  $$('#seg button', box).forEach((b) => (b.onclick = () => { grupo = b.dataset.g; desenharGrupo(); sugerirCategoria(); }));
   $('#arq', box).onchange = (e) => {
+    const novos = [];
     for (const f of e.target.files) {
-      if (f.size > 10 * 1024 * 1024 && !/^image\/(jpeg|png|webp)/.test(f.type)) { aviso(`"${f.name}" tem mais de 10 MB.`, true); continue; }
-      arquivos.push(f);
+      const imagem = (f.type || '').startsWith('image/') || /\.(hei[cf]|jpe?g|png|webp)$/i.test(f.name);
+      if (!imagem) { aviso(`"${f.name}" não é uma imagem. Envie a foto da nota (JPG, PNG ou HEIC).`, true); continue; }
+      if (f.size > 25 * 1024 * 1024) { aviso(`"${f.name}" é muito grande.`, true); continue; }
+      arquivos.push(f); novos.push(f);
     }
     e.target.value = ''; desenharAnexos();
+    // lê automaticamente a primeira foto de um lançamento novo
+    if (novos.length && novo && arquivos.length === novos.length) lerNota(novos[0]);
   };
+  $('#b-ler', box).onclick = () => arquivos.length && lerNota(arquivos[arquivos.length - 1], true);
   desenharGrupo(); desenharAnexos();
 
-  let envio = 'rascunho';
+  let envio = fluxoEnvio ? 'rascunho' : 'manter';
   $$('[data-envio]', box).forEach((b) => (b.onclick = () => (envio = b.dataset.envio)));
   $('#f-d', box).onsubmit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
+    if (anexosExist.length + arquivos.length === 0) return aviso('Anexe a foto da nota fiscal ou recibo.', true);
     const valor = parseValor(f.valor);
     if (!(valor > 0)) return aviso('Informe um valor válido.', true);
     if (!f.categoria_id) return aviso('Escolha a categoria.', true);
     const btns = $$('button', box); btns.forEach((b) => (b.disabled = true));
     try {
-      const reg = { categoria_id: f.categoria_id, data: f.data, valor, descricao: f.descricao.trim() || null, centro_custo_id: v.centro_custo_id || null };
+      const reg = { categoria_id: f.categoria_id, data: f.data, valor, descricao: f.descricao.trim() || null, centro_custo_id: v.centro_custo_id || null, forma_pagamento: (f.forma_pagamento || '').trim() || null };
       let id = d?.id;
       if (novo) {
         const r = await q(sb.from('despesas').insert({ ...reg, viagem_id: v.id, colaborador_id: S.eu.id, status: 'rascunho' }).select('id').single());
         id = r.id;
       } else {
-        await q(sb.from('despesas').update({ ...reg, status: d.status === 'recusada' ? 'rascunho' : d.status }).eq('id', id));
+        await q(sb.from('despesas').update(d.status === 'recusada' ? { ...reg, status: 'rascunho' } : reg).eq('id', id));
       }
+      for (const arq of arquivos) await enviarArquivo(id, arq);
       for (const a of removidos) {
         await sb.storage.from(BUCKET).remove([a.caminho]);
         await q(sb.from('anexos').delete().eq('id', a.id));
       }
-      for (const arq of arquivos) await enviarArquivo(id, arq);
       if (envio === 'enviada') await q(sb.from('despesas').update({ status: 'enviada' }).eq('id', id));
       fecharModal();
-      aviso(envio === 'enviada' ? 'Despesa enviada para aprovação.' : 'Despesa salva.');
+      aviso(envio === 'enviada' ? 'Despesa enviada para aprovação.' : novo ? 'Despesa salva.' : 'Alterações salvas.');
       rotear();
     } catch (err) { erro(err); btns.forEach((b) => (b.disabled = false)); }
   };
@@ -610,6 +688,7 @@ async function enviarArquivo(despesaId, original) {
 // ---------- RELATÓRIO (Excel e PDF no modelo Quimicer) ----------
 function dadosRelatorio(v, desp) {
   const validas = desp.filter((d) => d.status !== 'recusada');
+  const formas = [...new Set(validas.map((d) => (d.forma_pagamento || '').trim()).filter(Boolean))];
   const cc = v.centros_custo;
   return {
     titulo: v.titulo || ('VIAGEM ' + v.destino),
@@ -617,8 +696,9 @@ function dadosRelatorio(v, desp) {
     data_inicio: v.data_inicio, data_fim: v.data_fim, destino: v.destino,
     centro_custo: cc ? (cc.codigo ? cc.codigo + ' - ' : '') + cc.nome : '',
     veiculo: v.veiculo_empresa, km_inicial: v.km_inicial, km_final: v.km_final,
-    forma_pagamento: v.forma_pagamento, objetivos: v.objetivos,
-    despesas: validas.map((d) => ({ data: d.data, descricao: d.descricao || d.categorias.nome, coluna: d.categorias.coluna_relatorio, valor: d.valor })),
+    forma_pagamento: formas.length ? formas.join(' / ') : v.forma_pagamento, objetivos: v.objetivos,
+    despesas: validas.map((d) => ({ data: d.data, coluna: d.categorias.coluna_relatorio, valor: d.valor,
+      descricao: (d.descricao || d.categorias.nome) + (formas.length > 1 && d.forma_pagamento ? ' - ' + d.forma_pagamento : '') })),
     pendentes: validas.filter((d) => d.status === 'rascunho').length,
   };
 }
@@ -690,8 +770,31 @@ async function imprimirRelatorio(v, desp) {
       <td colspan="3" class="cab" style="text-align:left">${res[7][0]}</td><td></td><td colspan="2" class="n b">R$ ${n(res[7][1]) || '0,00'}</td></tr>
   </table>`;
   const img = $('#print-area img');
-  const imprimir = () => { const t = document.title; document.title = Relatorio.nomeAba(dados.titulo); window.print(); document.title = t; };
+  const imprimir = () => {
+    ajustarUmaPagina();
+    const t = document.title; document.title = Relatorio.nomeAba(dados.titulo); window.print(); document.title = t;
+  };
   if (img.complete) imprimir(); else { img.onload = imprimir; img.onerror = imprimir; }
+}
+
+// Reduz o relatório para caber inteiro em UMA folha A4 deitada (qualquer número de despesas)
+function ajustarUmaPagina() {
+  const pa = $('#print-area');
+  pa.innerHTML = '<div class="folha"><div class="folha-in">' + pa.innerHTML + '</div></div>';
+  const folha = pa.firstElementChild, dentro = folha.firstElementChild;
+  const mm = 96 / 25.4, larg = 284, alt = 194; // A4 deitada (297 x 210 mm) menos margens, com folga
+  pa.style.cssText = 'display:block;position:absolute;left:-99999px;top:0';
+  dentro.style.width = larg + 'mm';
+  let k = Math.min(1, (alt * mm) / dentro.getBoundingClientRect().height);
+  if (k < 1) {
+    dentro.style.width = (larg / k) + 'mm'; // mais largo antes de reduzir, para ocupar a largura da folha
+    k = Math.min(k, (alt * mm) / dentro.getBoundingClientRect().height);
+  }
+  dentro.style.transform = 'scale(' + k + ')';
+  dentro.style.transformOrigin = 'top left';
+  folha.style.width = larg + 'mm';
+  folha.style.height = alt + 'mm';
+  pa.style.cssText = '';
 }
 
 // ---------- APROVAÇÃO (financeiro) ----------
@@ -761,24 +864,24 @@ async function telaRelatorios() {
       <div><label>Situação</label><select name="status">${[['validas', 'Todas exceto recusadas'], ['', 'Todas'], ...Object.entries(ST_DESP)].map(([k, t]) => `<option value="${k}" ${k === f.status ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     </div><div class="acoes"><button class="btn sec" type="button" id="b-xrel">⬇ Excel</button><button class="btn">Filtrar</button></div></form>
     ${lista.length ? `<div class="grade" style="margin-bottom:1rem">${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([k, val]) => `<div class="card" style="margin:0"><div class="peq suave">${esc(k)}</div><b>${brl(val)}</b></div>`).join('')}</div>
-    <div class="tabela-wrap"><table class="t"><thead><tr><th>Data</th><th>Viagem</th><th>Colaborador</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+    <div class="tabela-wrap"><table class="t"><thead><tr><th>Data</th><th>Viagem</th><th>Colaborador</th><th>Categoria</th><th>Descrição</th><th>Pagamento</th><th class="num">Valor</th><th>Situação</th></tr></thead>
     <tbody>${lista.map((d) => `<tr><td>${dataBR(d.data)}</td><td><a href="#/viagem/${d.viagem_id}">${esc(d.viagens?.titulo || d.viagens?.destino || '—')}</a></td>
       <td>${esc(nomePerfil(d.colaborador_id))}</td><td>${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div></td>
-      <td>${esc(d.descricao || '')}</td><td class="num">${brl(d.valor)}</td><td>${stBadge(d.status)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">Total (${lista.length} despesas)</td><td class="num">${brl(total)}</td><td></td></tr></tfoot></table></div>`
+      <td>${esc(d.descricao || '')}</td><td>${esc(d.forma_pagamento || '')}</td><td class="num">${brl(d.valor)}</td><td>${stBadge(d.status)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="6">Total (${lista.length} despesas)</td><td class="num">${brl(total)}</td><td></td></tr></tfoot></table></div>`
     : '<div class="vazio card">Nenhuma despesa no período.</div>'}`;
   $('#f-rel').onsubmit = (e) => { e.preventDefault(); sessionStorage.setItem('filtroRel', JSON.stringify(Object.fromEntries(new FormData(e.target)))); telaRelatorios(); };
   $('#b-xrel').onclick = async () => {
     const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Despesas');
     ws.columns = [{ header: 'Data', key: 'data', width: 12 }, { header: 'Viagem', key: 'viagem', width: 30 }, { header: 'Colaborador', key: 'colab', width: 24 },
       { header: 'Quem pagou', key: 'grupo', width: 18 }, { header: 'Categoria', key: 'cat', width: 22 }, { header: 'Descrição', key: 'desc', width: 36 },
-      { header: 'Valor (R$)', key: 'valor', width: 14 }, { header: 'Situação', key: 'st', width: 12 }];
+      { header: 'Forma de pagamento', key: 'fp', width: 24 }, { header: 'Valor (R$)', key: 'valor', width: 14 }, { header: 'Situação', key: 'st', width: 12 }];
     lista.forEach((d) => {
       const [y, m, dd] = d.data.split('-').map(Number);
-      ws.addRow({ data: new Date(Date.UTC(y, m - 1, dd)), viagem: d.viagens?.titulo || d.viagens?.destino || '', colab: nomePerfil(d.colaborador_id), grupo: GRUPOS_CURTO[d.categorias.grupo], cat: d.categorias.nome, desc: d.descricao || '', valor: Number(d.valor), st: ST_DESP[d.status] });
+      ws.addRow({ data: new Date(Date.UTC(y, m - 1, dd)), viagem: d.viagens?.titulo || d.viagens?.destino || '', colab: nomePerfil(d.colaborador_id), grupo: GRUPOS_CURTO[d.categorias.grupo], cat: d.categorias.nome, desc: d.descricao || '', fp: d.forma_pagamento || '', valor: Number(d.valor), st: ST_DESP[d.status] });
     });
     const ult = lista.length + 1;
-    ws.addRow({ desc: 'TOTAL', valor: { formula: `SUM(G2:G${ult})` } }).font = { bold: true };
+    ws.addRow({ desc: 'TOTAL', valor: { formula: `SUM(H2:H${ult})` } }).font = { bold: true };
     ws.getColumn('data').numFmt = 'dd/mm/yyyy'; ws.getColumn('valor').numFmt = '#,##0.00';
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF009999' } };
