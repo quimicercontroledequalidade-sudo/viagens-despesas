@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.10.30-2';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.10.30-3';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -464,6 +464,7 @@ function linhaDespesa(d, extra = '') {
     botoes.push(`<button class="btn peq perigo" data-acao="recusar" data-id="${d.id}">Recusar</button>`);
   }
   if (eFin() && d.status === 'aprovada') botoes.push(`<button class="btn peq" data-acao="pagar" data-id="${d.id}">Marcar paga</button>`);
+  if (eDev() && ['aprovada', 'paga'].includes(d.status)) botoes.push(`<button class="btn peq sec" data-acao="desaprovar" data-id="${d.id}">↩️ Desaprovar</button>`);
   botoes.push(`<button class="btn peq link" data-acao="historico" data-id="${d.id}">Histórico</button>`);
   return `<tr>
     <td data-l="Data">${dataBR(d.data)}</td>
@@ -501,6 +502,9 @@ function ligarAcoesDespesa(lista, recarregar) {
           if (!m) return;
           await q(sb.from('despesas').update({ status: 'recusada', motivo_recusa: m }).eq('id', d.id)); aviso('Recusada.'); break;
         }
+        case 'desaprovar':
+          if (!(await confirmar(`Desfazer a ${d.status === 'paga' ? 'aprovação e o pagamento' : 'aprovação'} de "${d.descricao || d.categorias.nome}" (${brl(d.valor)})? Ela volta para "Enviada", aguardando aprovação.`, 'Desaprovar', true))) return;
+          await q(sb.from('despesas').update({ status: 'enviada' }).eq('id', d.id)); aviso('Aprovação desfeita. A despesa voltou para "Enviada".'); break;
         case 'pagar':
           await q(sb.from('despesas').update({ status: 'paga' }).eq('id', d.id)); aviso('Marcada como paga.'); break;
         case 'historico': return verHistorico(d);
