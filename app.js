@@ -613,19 +613,35 @@ function formDespesa(v, d = null) {
   };
 
   $$('#seg button', box).forEach((b) => (b.onclick = () => { grupo = b.dataset.g; desenharGrupo(); sugerirCategoria(); }));
-  $('#arq', box).onchange = (e) => {
+  const fonteLeitura = new Map(); // PDF convertido do HEIC -> imagem usada na leitura
+  $('#arq', box).onchange = async (e) => {
+    const escolhidos = [...e.target.files]; e.target.value = '';
     const novos = [];
-    for (const f of e.target.files) {
+    const st = $('#ocr-status', box);
+    for (const f of escolhidos) {
       const imagem = (f.type || '').startsWith('image/') || /\.(hei[cf]|jpe?g|png|webp)$/i.test(f.name);
       if (!imagem) { aviso(`"${f.name}" não é uma imagem. Envie a foto da nota (JPG, PNG ou HEIC).`, true); continue; }
       if (f.size > 25 * 1024 * 1024) { aviso(`"${f.name}" é muito grande.`, true); continue; }
+      if (eHeic(f)) {
+        st.textContent = '🔄 Convertendo foto do iPhone (HEIC) para PDF…';
+        try {
+          const { pdf, imagem: jpg } = await heicParaPdf(f);
+          fonteLeitura.set(pdf, jpg);
+          arquivos.push(pdf); novos.push(pdf);
+          st.textContent = `✅ "${f.name}" convertida para PDF.`;
+        } catch (err) {
+          console.error(err);
+          aviso(`Não foi possível converter "${f.name}". Tente tirar a foto de novo ou enviar em JPG.`, true);
+        }
+        continue;
+      }
       arquivos.push(f); novos.push(f);
     }
-    e.target.value = ''; desenharAnexos();
+    desenharAnexos();
     // lê automaticamente a primeira foto de um lançamento novo
-    if (novos.length && novo && arquivos.length === novos.length) lerNota(novos[0]);
+    if (novos.length && novo && arquivos.length === novos.length) lerNota(fonteLeitura.get(novos[0]) || novos[0]);
   };
-  $('#b-ler', box).onclick = () => arquivos.length && lerNota(arquivos[arquivos.length - 1], true);
+  $('#b-ler', box).onclick = () => { const a = arquivos[arquivos.length - 1]; if (a) lerNota(fonteLeitura.get(a) || a, true); };
   desenharGrupo(); desenharAnexos();
 
   let envio = fluxoEnvio ? 'rascunho' : 'manter';
@@ -658,6 +674,42 @@ function formDespesa(v, d = null) {
       rotear();
     } catch (err) { erro(err); btns.forEach((b) => (b.disabled = false)); }
   };
+}
+
+// ---------- HEIC (iPhone) -> PDF ----------
+const eHeic = (f) => /image\/hei[cf]/i.test(f.type || '') || /\.hei[cf]$/i.test(f.name || '');
+const _scripts = {};
+function carregarScript(src, nomeGlobal) {
+  if (nomeGlobal && window[nomeGlobal]) return Promise.resolve();
+  if (!_scripts[src]) {
+    _scripts[src] = new Promise((res, rej) => {
+      const el = document.createElement('script'); el.src = src;
+      el.onload = res; el.onerror = () => { delete _scripts[src]; rej(new Error('Falha ao carregar ' + src)); };
+      document.head.appendChild(el);
+    });
+  }
+  return _scripts[src];
+}
+async function heicParaPdf(file) {
+  await Promise.all([
+    carregarScript('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js', 'heic2any'),
+    carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf'),
+  ]);
+  let jpg = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+  if (Array.isArray(jpg)) jpg = jpg[0];
+  const base = (file.name || 'nota').replace(/\.hei[cf]$/i, '');
+  let imagem = new File([jpg], base + '.jpg', { type: 'image/jpeg' });
+  imagem = await reduzirImagem(imagem);
+  const bmp = await createImageBitmap(imagem);
+  const deitada = bmp.width > bmp.height;
+  const doc = new jspdf.jsPDF({ orientation: deitada ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(), m = 6;
+  const k = Math.min((pw - 2 * m) / bmp.width, (ph - 2 * m) / bmp.height);
+  const w = bmp.width * k, h = bmp.height * k;
+  const dataUrl = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(imagem); });
+  doc.addImage(dataUrl, 'JPEG', (pw - w) / 2, m, w, h);
+  const pdf = new File([doc.output('blob')], base + '.pdf', { type: 'application/pdf' });
+  return { pdf, imagem };
 }
 
 async function reduzirImagem(file) {
