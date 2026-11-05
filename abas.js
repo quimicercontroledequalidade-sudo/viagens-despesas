@@ -3,10 +3,13 @@
 (function () {
   const APPS_ABAS = [
     { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true },
-    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: '', pronto: false,
+    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: '', pronto: false, soDev: true,
       descricao: 'Controle das amostras AQM, com descrição dos produtos e local de armazenamento (estante/prateleira).' },
   ];
+  window.DevAbas = { definirCargo() {} };
   if (window.top !== window.self) return; // já está dentro de outro painel: não repete as abas
+  let cargo = null; // as abas "soDev" só aparecem para o Desenvolvedor
+  const pode = (a) => !a.soDev || cargo === 'desenvolvedor';
 
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const lembrar = (v) => { try { if (v === undefined) return localStorage.getItem('dev.aba'); localStorage.setItem('dev.aba', v); } catch { /* sem armazenamento */ } return v; };
@@ -14,7 +17,7 @@
   const barra = document.createElement('div');
   barra.className = 'dev-barra';
   barra.innerHTML = `<span class="dev-titulo">Desenvolvimento</span><nav class="dev-abas" role="tablist">${APPS_ABAS.map((a) =>
-    `<button role="tab" data-aba="${a.id}">${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
+    `<button role="tab" data-aba="${a.id}"${a.soDev ? ' hidden' : ''}>${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
   document.body.prepend(barra);
 
   const area = document.createElement('div');
@@ -23,7 +26,7 @@
   const quadros = {};
 
   function abrir(id) {
-    const app = APPS_ABAS.find((a) => a.id === id) || APPS_ABAS[0];
+    const app = APPS_ABAS.find((a) => a.id === id && pode(a)) || APPS_ABAS[0];
     barra.querySelectorAll('[data-aba]').forEach((b) => { const on = b.dataset.aba === app.id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
     document.body.classList.toggle('dev-outro', !app.interno);
     area.hidden = !!app.interno;
@@ -42,8 +45,17 @@
           <p>${esc(app.descricao || '')}</p><p><b>Em breve.</b> Esta aba será liberada quando o app for publicado.</p></div>`);
       }
     }
-    lembrar(app.id);
+    if (!id || app.id === id) lembrar(app.id); // não esquece a aba preferida só porque ainda não está liberada
   }
   barra.addEventListener('click', (e) => { const b = e.target.closest('[data-aba]'); if (b) abrir(b.dataset.aba); });
   abrir(lembrar() || 'viagens');
+
+  // chamado pelo app depois do login (e ao sair)
+  window.DevAbas.definirCargo = (c) => {
+    cargo = c || null;
+    APPS_ABAS.forEach((a) => { const b = barra.querySelector(`[data-aba="${a.id}"]`); if (b) b.hidden = !pode(a); });
+    const atual = barra.querySelector('[data-aba].on')?.dataset.aba;
+    const desejada = lembrar() || atual;
+    abrir(desejada); // se a aba lembrada não é permitida, volta para Viagens
+  };
 })();
