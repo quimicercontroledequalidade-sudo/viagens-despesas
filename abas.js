@@ -2,15 +2,16 @@
 // Para incluir um app novo, acrescente um item em APPS_ABAS.
 (function () {
   const APPS_ABAS = [
-    { id: 'cadastros', nome: 'Cadastros', icone: '👥', interno: true, rota: '#/admin', soAdmin: true },
-    { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true },
-    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, soAmostras: true,
+    { id: 'cadastros', nome: 'Cadastros', icone: '👥', interno: true, rota: '#/admin', chave: 'cadastros' },
+    { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true, chave: 'viagens' },
+    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, chave: 'amostras',
       descricao: 'Controle das amostras AQM, com descrição dos produtos e local de armazenamento (estante/prateleira).' },
   ];
   window.DevAbas = { definirCargo() {} };
   if (window.top !== window.self) return; // já está dentro de outro painel: não repete as abas
-  let cargo = null, extras = {}; // "soAdmin": Admin e Desenvolvedor; "soAmostras": quem tem acesso às amostras (equipe Desenvolvimento)
-  const pode = (a) => (!a.soDev || cargo === 'desenvolvedor') && (!a.soAdmin || cargo === 'admin' || cargo === 'desenvolvedor') && (!a.soAmostras || !!extras.amostras);
+  let cargo = null, extras = null; // extras = abas liberadas para a pessoa (o Desenvolvedor decide em Cadastros)
+  // antes do login só a aba Viagens aparece (é onde fica a tela de entrar)
+  const pode = (a) => (extras ? !!extras[a.chave] : a.id === 'viagens');
   const PADRAO = 'viagens';
 
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -19,7 +20,7 @@
   const barra = document.createElement('div');
   barra.className = 'dev-barra';
   barra.innerHTML = `<span class="dev-titulo">Desenvolvimento</span><nav class="dev-abas" role="tablist">${APPS_ABAS.map((a) =>
-    `<button role="tab" data-aba="${a.id}"${a.soDev || a.soAdmin || a.soAmostras ? ' hidden' : ''}>${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
+    `<button role="tab" data-aba="${a.id}"${a.id !== 'viagens' ? ' hidden' : ''}>${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
   document.body.prepend(barra);
 
   const area = document.createElement('div');
@@ -32,7 +33,7 @@
   }
 
   function abrir(id, deClique) {
-    const app = APPS_ABAS.find((a) => a.id === id && pode(a)) || APPS_ABAS.find((a) => a.id === PADRAO);
+    const app = APPS_ABAS.find((a) => a.id === id && pode(a)) || APPS_ABAS.find((a) => a.id === PADRAO && pode(a)) || APPS_ABAS.find(pode) || APPS_ABAS.find((a) => a.id === PADRAO);
     marcar(app.id);
     document.body.classList.toggle('dev-outro', !app.interno);
     area.hidden = !!app.interno;
@@ -70,7 +71,7 @@
 
   // chamado pelo app depois do login (e ao sair)
   window.DevAbas.definirCargo = (c, x) => {
-    cargo = c || null; extras = (c && x) || {};
+    cargo = c || null; extras = c ? (x || {}) : null;
     APPS_ABAS.forEach((a) => { const b = barra.querySelector(`[data-aba="${a.id}"]`); if (b) b.hidden = !pode(a); });
     const atual = barra.querySelector('[data-aba].on')?.dataset.aba;
     abrir(location.hash.startsWith('#/admin') ? 'cadastros' : (atual === 'cadastros' ? PADRAO : lembrar() || atual)); // aba não permitida → volta para Viagens

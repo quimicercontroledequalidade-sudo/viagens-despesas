@@ -305,7 +305,7 @@ async function iniciar() {
     $('#quem').textContent = S.eu ? (S.eu.nome || S.eu.email) : '';
     if (!S.eu || !S.eu.ativo) { $('#app').innerHTML = '<div class="vazio card">Seu acesso ainda não foi liberado por um administrador.</div>'; return; }
     S.acesso = await q(sb.rpc('pode_amostras'));
-    if (!S.acesso) { $('#app').innerHTML = '<div class="vazio card">Você ainda não tem acesso ao Controle de Amostras. Peça a um administrador para liberar em <b>Cadastros → Usuários → 🧪 Controle de Amostras</b> (ou incluir você na equipe Desenvolvimento).</div>'; return; }
+    if (!S.acesso) { $('#app').innerHTML = '<div class="vazio card">Você ainda não tem acesso ao Controle de Amostras. Peça ao desenvolvedor para liberar a aba <b>🧪 Controle de Amostras</b> para você.</div>'; return; }
     $('#app').innerHTML = '<div class="vazio">Carregando amostras…</div>';
     await carregarAmostras();
     telaLista();
