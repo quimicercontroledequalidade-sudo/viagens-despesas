@@ -175,4 +175,24 @@ table.t tfoot td { font-weight: 700; background: #fafcfc; }
 [hidden] { display: none !important; }
 
 /* Aviso de versão nova */
-.faixa-versao { position: sticky; top: 0; z-index: 20; background: #fff3cd; color: #5c4a00; text-align: center; padding: .45rem 16px; font-size: .9rem; display: flex; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px solid #f3d27a; }
+.faixa-versao { position: relative; z-index: 20; background: #fff3cd; color: #5c4a00; text-align: center; padding: .45rem 16px; font-size: .9rem; display: flex; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px solid #f3d27a; }
+
+/* Barra Desenvolvimento (abas de apps) */
+.dev-barra { background: #005c5c; color: #fff; display: flex; align-items: flex-end; gap: .6rem; padding: .3rem 12px 0; position: sticky; top: 0; z-index: 30; }
+.dev-titulo { font-weight: 700; font-size: .82rem; opacity: .85; padding-bottom: .45rem; white-space: nowrap; }
+.dev-abas { display: flex; gap: .25rem; overflow-x: auto; scrollbar-width: none; }
+.dev-abas::-webkit-scrollbar { display: none; }
+.dev-abas button { flex: none; border: 0; background: rgba(255,255,255,.12); color: #e6f6f6; font: inherit; font-weight: 600; font-size: .86rem; padding: .42rem .8rem; border-radius: 9px 9px 0 0; cursor: pointer; }
+.dev-abas button.on { background: var(--teal-esc); color: #fff; }
+.dev-breve { font-size: .66rem; font-weight: 700; background: #fff3cd; color: #8a6d00; border-radius: 99px; padding: .05rem .4rem; }
+.dev-barra + .dev-area + .topo, .dev-barra ~ .topo { top: 34px; }
+body.dev-outro > .topo, body.dev-outro > .app, body.dev-outro > .rodape, body.dev-outro > #faixa-versao { display: none !important; }
+.dev-area { position: relative; height: calc(100dvh - 34px); }
+.dev-area iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.dev-area iframe[hidden] { display: none; }
+.dev-aviso { max-width: 520px; margin: 12vh auto 0; padding: 1.4rem; background: #fff; border: 1px solid var(--borda); border-radius: 12px; text-align: center; }
+.dev-aviso .dev-ic { font-size: 2.4rem; }
+.dev-aviso h2 { margin: .4rem 0; }
+.dev-aviso p { color: var(--suave); }
+@media (max-width: 560px) { .dev-titulo { display: none; } }
+@media print { .dev-barra, .dev-area { display: none !important; } }

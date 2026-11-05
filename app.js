@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.10.30-4';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.05-1';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -142,7 +142,7 @@ async function instalarApp() {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // ---------- atualizar o app ----------
-const ARQS_APP = ['./', 'index.html', 'app.js', 'styles.css', 'relatorio.js', 'leitor_nota.js', 'modelo_relatorio.xlsx', 'manifest.json', 'sw.js', 'versao.json'];
+const ARQS_APP = ['./', 'index.html', 'app.js', 'styles.css', 'relatorio.js', 'leitor_nota.js', 'abas.js', 'modelo_relatorio.xlsx', 'manifest.json', 'sw.js', 'versao.json'];
 async function atualizarApp() {
   aviso('🔄 Atualizando o app…');
   try {
