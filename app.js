@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.05-5';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.05-6';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -990,6 +990,13 @@ async function telaRelatorios() {
 }
 
 // ---------- CADASTROS (admin) ----------
+// acesso automático ao Controle de Amostras (pelo cargo ou pela equipe Desenvolvimento)
+function acessoAmostrasAuto(p) {
+  if (['admin', 'desenvolvedor'].includes(p.cargo)) return 'pelo cargo';
+  const eq = S.equipes.find((e) => e.id === p.equipe_id);
+  return eq && eq.nome.trim().toLowerCase() === 'desenvolvimento' ? 'pela equipe' : '';
+}
+
 async function telaAdmin(aba) {
   await carregarApoio();
   const abas = { usuarios: 'Usuários', equipes: 'Equipes', centros: 'Centros de custo / clientes', categorias: 'Categorias' };
@@ -1005,11 +1012,13 @@ async function telaAdmin(aba) {
       </div></div>
       <details class="card"><summary><b>O que cada cargo pode fazer</b></summary>
         ${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev()).map(([k, t]) => `<div class="peq" style="margin:.3rem 0"><b>${t}:</b> ${CARGOS_DESC[k]}</div>`).join('')}</details>
-      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th>${eDev() ? '<th>Pode trocar a própria função</th><th></th>' : ''}</tr></thead><tbody>
-      ${S.perfis.map((p) => `<tr data-p="${p.id}"><td><input data-c="nome" value="${esc(p.nome)}" style="min-width:160px"></td><td>${esc(p.email)}</td>
-        <td><select data-c="cargo" ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled title="Sem permissão para mudar este cargo"' : ''}>${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev() || p.cargo === 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
-        <td><select data-c="equipe_id"><option value="">—</option>${S.equipes.map((e) => `<option value="${e.id}" ${e.id === p.equipe_id ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></td>
+      <div class="tabela-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Cargo</th><th>Equipe</th><th>Liberado</th><th title="Quem pode abrir o Controle de Amostras">🧪 Controle de Amostras</th>${eDev() ? '<th>Pode trocar a própria função</th><th></th>' : ''}</tr></thead><tbody>
+      ${S.perfis.map((p) => `<tr data-p="${p.id}"><td><input data-c="nome" value="${esc(p.nome)}" style="min-width:150px"></td><td>${esc(p.email)}</td>
+        <td><select data-c="cargo" style="min-width:140px" ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled title="Sem permissão para mudar este cargo"' : ''}>${Object.entries(CARGOS).filter(([k]) => k !== 'desenvolvedor' || eDev() || p.cargo === 'desenvolvedor').map(([k, t]) => `<option value="${k}" ${k === p.cargo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+        <td><select data-c="equipe_id" style="min-width:150px"><option value="">—</option>${S.equipes.map((e) => `<option value="${e.id}" ${e.id === p.equipe_id ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select></td>
         <td><label class="check" style="margin:0"><input type="checkbox" data-c="ativo" ${p.ativo ? 'checked' : ''} ${p.id === S.eu.id || (p.cargo === 'desenvolvedor' && !eDev()) ? 'disabled' : ''}> ${p.ativo ? '' : '<span class="st st-enviada">aguardando</span>'}</label></td>
+        <td>${acessoAmostrasAuto(p) ? `<label class="check" style="margin:0" title="Liberado automaticamente"><input type="checkbox" checked disabled> <span class="suave peq">${acessoAmostrasAuto(p)}</span></label>`
+          : `<label class="check" style="margin:0"><input type="checkbox" data-c="acesso_amostras" ${p.acesso_amostras ? 'checked' : ''}></label>`}</td>
         ${eDev() ? `<td><input type="checkbox" data-c="pode_trocar_funcao" ${p.pode_trocar_funcao ? 'checked' : ''} ${p.cargo === 'desenvolvedor' ? 'disabled' : ''}></td>
           <td>${p.id === S.eu.id ? '' : `<button class="btn peq sec" data-excluir-usuario="${p.id}">🗑 Excluir</button>`}</td>` : ''}</tr>`).join('')}
       </tbody></table></div>`;
