@@ -1,0 +1,14 @@
+{
+  "name": "Controle de Amostras — Quimicer",
+  "short_name": "Amostras",
+  "start_url": "./amostras.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f7",
+  "theme_color": "#007a7a",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

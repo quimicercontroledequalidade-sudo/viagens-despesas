@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.05-2';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.05-3';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 

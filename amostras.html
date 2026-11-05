@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controle de Amostras — Quimicer</title>
+  <meta name="theme-color" content="#007a7a">
+  <meta name="author" content="Emerson Honorato — emersomhonorato@gmail.com">
+  <link rel="icon" href="icone-192.png">
+  <link rel="manifest" href="manifest-amostras.json">
+  <link rel="stylesheet" href="amostras.css">
+</head>
+<body>
+  <header class="topo" id="topo" hidden>
+    <div class="topo-in">
+      <div class="marca"><img src="logo_quimicer.png" alt="Quimicer"><span>Controle de Amostras</span></div>
+      <div class="topo-acoes">
+        <span id="quem" class="quem"></span>
+        <button id="b-atualizar" title="Atualizar app">🔄</button>
+        <button id="b-sair">Sair</button>
+      </div>
+    </div>
+  </header>
+  <main id="app" class="app"></main>
+  <footer class="rodape">Desenvolvido por <b>Emerson Honorato</b> · <a href="mailto:emersomhonorato@gmail.com">emersomhonorato@gmail.com</a></footer>
+  <div id="modal" class="modal" hidden><div class="modal-box" id="modal-box"></div></div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <script src="amostras.js"></script>
+</body>
+</html>

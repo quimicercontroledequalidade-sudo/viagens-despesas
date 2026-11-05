@@ -3,7 +3,7 @@
 (function () {
   const APPS_ABAS = [
     { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true },
-    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: '', pronto: false, soDev: true,
+    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, soDev: true,
       descricao: 'Controle das amostras AQM, com descrição dos produtos e local de armazenamento (estante/prateleira).' },
   ];
   window.DevAbas = { definirCargo() {} };

@@ -1,6 +1,6 @@
 // Service worker: permite instalar o app e abrir a tela mesmo com internet fraca.
 // Sempre tenta buscar a versão nova primeiro; usa a cópia salva só se estiver sem conexão.
-const CACHE = 'viagens-despesas-v14';
+const CACHE = 'viagens-despesas-v15';
 const ARQUIVOS = ['./', 'index.html', 'app.js', 'styles.css', 'relatorio.js', 'leitor_nota.js', 'abas.js', 'modelo_relatorio.xlsx',
   'logo_quimicer.png', 'icone-192.png', 'icone-512.png', 'manifest.json'];
 
