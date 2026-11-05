@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.05-4';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.05-5';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -266,6 +266,11 @@ function marcarMenu() {
   const h = location.hash.split('/').slice(0, 2).join('/');
   $$('#menu a').forEach((a) => a.classList.toggle('ativo', a.getAttribute('href') === h || (h === '#/viagem' && a.getAttribute('href') === '#/viagens')));
   $('#menu').classList.remove('aberto');
+}
+
+// quais abas da barra Desenvolvimento esta pessoa pode ver
+async function acessoAbas() {
+  try { const { data } = await sb.rpc('pode_amostras'); return { amostras: !!data }; } catch { return {}; }
 }
 
 async function rotear() {
@@ -1122,7 +1127,7 @@ function telaConta() {
       if (novo === S.eu.cargo) return aviso('Você já está nessa função.');
       try {
         await q(sb.from('perfis').update({ cargo: novo }).eq('id', S.eu.id));
-        await carregarEu(); await carregarApoio(); window.DevAbas?.definirCargo(S.eu.cargo); montarMenu(); telaConta(); marcarMenu();
+        await carregarEu(); await carregarApoio(); window.DevAbas?.definirCargo(S.eu.cargo, await acessoAbas()); montarMenu(); telaConta(); marcarMenu();
         aviso('Agora você está como ' + CARGOS[S.eu.cargo] + '.');
       } catch (err) { erro(err); }
     };
@@ -1147,7 +1152,7 @@ async function iniciar() {
     if (S.recuperandoSenha) return telaLogin('nova');
     if (!S.sessao) { window.DevAbas?.definirCargo(null); return telaLogin(location.hash.startsWith('#/cadastro') ? 'cadastrar' : 'entrar'); }
     await carregarEu();
-    window.DevAbas?.definirCargo(S.eu?.ativo ? S.eu.cargo : null);
+    window.DevAbas?.definirCargo(S.eu?.ativo ? S.eu.cargo : null, S.eu?.ativo ? await acessoAbas() : {});
     if (!S.eu || !S.eu.ativo) return telaAguardando();
     await carregarApoio();
     montarMenu();

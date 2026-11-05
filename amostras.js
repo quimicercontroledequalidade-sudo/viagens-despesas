@@ -17,7 +17,8 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dataBR = (iso) => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
 const hoje = () => new Date().toLocaleDateString('sv-SE');
-const podeEditar = () => ['admin', 'desenvolvedor'].includes(S.eu?.cargo);
+const podeEditar = () => !!S.acesso; // Admin, Desenvolvedor e equipe Desenvolvimento
+const podeApagar = () => ['admin', 'desenvolvedor'].includes(S.eu?.cargo);
 const sem = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 function aviso(msg, erro = false) {
   const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (erro ? ' erro' : ''); t.hidden = false;
@@ -189,7 +190,7 @@ function verFicha(a) {
       ${linha('Observações', esc(a.observacoes).replace(/\n/g, '<br>'))}
     </dl>
     <div class="acoes">
-      ${podeEditar() ? `<button class="btn sec perigo-txt" id="f-apagar">🗑 Apagar</button>
+      ${podeEditar() ? `${podeApagar() ? '<button class="btn sec perigo-txt" id="f-apagar">🗑 Apagar</button>' : ''}
         <button class="btn sec" id="ficha-sit">${a.situacao === 'acabou' ? '↩️ Reativar' : '⚪ Marcar que acabou'}</button>
         <button class="btn sec" id="f-editar">✏️ Editar</button>` : ''}
       <button class="btn" data-fechar>Fechar</button>
@@ -203,7 +204,7 @@ function verFicha(a) {
       Object.assign(a, r); fecharModal(); aviso(nova === 'acabou' ? `${a.numero} marcada como "acabou".` : `${a.numero} reativada.`); telaLista();
     } catch (e) { erro(e); }
   };
-  $('#f-apagar', box).onclick = async () => {
+  if ($('#f-apagar', box)) $('#f-apagar', box).onclick = async () => {
     if (!(await confirmar(`Apagar a amostra ${a.numero} (${a.descricao || ''})? Isso não pode ser desfeito. Se o produto só acabou, prefira "Marcar que acabou".`, 'Apagar', true))) return;
     try { await q(sb.from('amostras').delete().eq('id', a.id)); S.amostras = S.amostras.filter((x) => x.id !== a.id); aviso('Amostra apagada.'); telaLista(); } catch (e) { erro(e); }
   };
@@ -303,6 +304,8 @@ async function iniciar() {
     $('#topo').hidden = false;
     $('#quem').textContent = S.eu ? (S.eu.nome || S.eu.email) : '';
     if (!S.eu || !S.eu.ativo) { $('#app').innerHTML = '<div class="vazio card">Seu acesso ainda não foi liberado por um administrador.</div>'; return; }
+    S.acesso = await q(sb.rpc('pode_amostras'));
+    if (!S.acesso) { $('#app').innerHTML = '<div class="vazio card">O Controle de Amostras é liberado para a equipe <b>Desenvolvimento</b>. Peça a um administrador para incluir você nessa equipe.</div>'; return; }
     $('#app').innerHTML = '<div class="vazio">Carregando amostras…</div>';
     await carregarAmostras();
     telaLista();

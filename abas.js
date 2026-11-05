@@ -4,13 +4,13 @@
   const APPS_ABAS = [
     { id: 'cadastros', nome: 'Cadastros', icone: '👥', interno: true, rota: '#/admin', soAdmin: true },
     { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true },
-    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, soDev: true,
+    { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, soAmostras: true,
       descricao: 'Controle das amostras AQM, com descrição dos produtos e local de armazenamento (estante/prateleira).' },
   ];
   window.DevAbas = { definirCargo() {} };
   if (window.top !== window.self) return; // já está dentro de outro painel: não repete as abas
-  let cargo = null; // "soDev" só para o Desenvolvedor; "soAdmin" para Admin e Desenvolvedor
-  const pode = (a) => (!a.soDev || cargo === 'desenvolvedor') && (!a.soAdmin || cargo === 'admin' || cargo === 'desenvolvedor');
+  let cargo = null, extras = {}; // "soAdmin": Admin e Desenvolvedor; "soAmostras": quem tem acesso às amostras (equipe Desenvolvimento)
+  const pode = (a) => (!a.soDev || cargo === 'desenvolvedor') && (!a.soAdmin || cargo === 'admin' || cargo === 'desenvolvedor') && (!a.soAmostras || !!extras.amostras);
   const PADRAO = 'viagens';
 
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -19,7 +19,7 @@
   const barra = document.createElement('div');
   barra.className = 'dev-barra';
   barra.innerHTML = `<span class="dev-titulo">Desenvolvimento</span><nav class="dev-abas" role="tablist">${APPS_ABAS.map((a) =>
-    `<button role="tab" data-aba="${a.id}"${a.soDev || a.soAdmin ? ' hidden' : ''}>${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
+    `<button role="tab" data-aba="${a.id}"${a.soDev || a.soAdmin || a.soAmostras ? ' hidden' : ''}>${a.icone} ${esc(a.nome)}${a.interno || a.pronto ? '' : ' <span class="dev-breve">em breve</span>'}</button>`).join('')}</nav>`;
   document.body.prepend(barra);
 
   const area = document.createElement('div');
@@ -69,8 +69,8 @@
   abrir(inicial);
 
   // chamado pelo app depois do login (e ao sair)
-  window.DevAbas.definirCargo = (c) => {
-    cargo = c || null;
+  window.DevAbas.definirCargo = (c, x) => {
+    cargo = c || null; extras = (c && x) || {};
     APPS_ABAS.forEach((a) => { const b = barra.querySelector(`[data-aba="${a.id}"]`); if (b) b.hidden = !pode(a); });
     const atual = barra.querySelector('[data-aba].on')?.dataset.aba;
     abrir(location.hash.startsWith('#/admin') ? 'cadastros' : (atual === 'cadastros' ? PADRAO : lembrar() || atual)); // aba não permitida → volta para Viagens
