@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.06-1';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.06-2';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -182,6 +182,27 @@ async function carregarApoio() {
     q(sb.from('equipes').select('*').order('nome')),
   ]);
   S.categorias = cats; S.centros = cen; S.perfis = per; S.equipes = eq;
+  try { S.cidades = await q(sb.from('cidades').select('*').order('nome')); } catch { S.cidades = []; }
+}
+// cidades: "Criciúma/SC"
+const nomeCidade = (c) => (c ? c.nome + (c.uf ? '/' + c.uf : '') : '');
+function separarCidade(txt) {
+  const m = String(txt || '').trim().replace(/\s+/g, ' ').match(/^(.*?)(?:\s*[\/\-–,]\s*([A-Za-z]{2}))?$/);
+  return { nome: (m ? m[1] : txt).trim(), uf: m && m[2] ? m[2].toUpperCase() : null };
+}
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+async function obterCidade(txt) {
+  const { nome, uf } = separarCidade(txt);
+  if (nome.length < 2) return null;
+  const achada = S.cidades.find((c) => semAcento(c.nome) === semAcento(nome) && (!uf || !c.uf || c.uf === uf));
+  if (achada) return achada.id;
+  const { data, error } = await sb.from('cidades').insert({ nome, uf }).select('*').single();
+  if (error) { // outra pessoa cadastrou ao mesmo tempo
+    S.cidades = await q(sb.from('cidades').select('*').order('nome'));
+    const c = S.cidades.find((x) => semAcento(x.nome) === semAcento(nome) && (x.uf || null) === uf);
+    if (c) return c.id; throw error;
+  }
+  S.cidades.push(data); return data.id;
 }
 async function carregarEu() {
   const uid = S.sessao?.user?.id;
@@ -494,7 +515,7 @@ function linhaDespesa(d, extra = '') {
       <div class="anexos">${(d.anexos || []).map((a) => `<button class="anexo" data-anexo="${esc(a.caminho)}" data-tipo="${esc(a.tipo_arquivo || '')}">📎 ${esc(a.nome_arquivo.slice(0, 22))}</button>`).join('') || (d.status === 'rascunho' || d.status === 'recusada' ? '<span class="peq suave">sem comprovante</span>' : '')}</div>
       ${d.status === 'recusada' && d.motivo_recusa ? `<div class="peq" style="color:var(--perigo)">Motivo: ${esc(d.motivo_recusa)}</div>` : ''}
     </td>
-    <td data-l="Categoria">${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div>${d.forma_pagamento ? `<div class="grupo-tag">💳 ${esc(d.forma_pagamento)}</div>` : ''}</td>
+    <td data-l="Categoria">${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div>${d.forma_pagamento ? `<div class="grupo-tag">💳 ${esc(d.forma_pagamento)}</div>` : ''}${d.cliente_id ? `<div class="grupo-tag">🏢 ${esc(S.centros.find((c) => c.id === d.cliente_id)?.nome || '')}</div>` : ''}${d.cidade_id ? `<div class="grupo-tag">📍 ${esc(nomeCidade(S.cidades.find((c) => c.id === d.cidade_id)))}</div>` : ''}</td>
     <td data-l="Lançado por">${esc(nomePerfil(d.colaborador_id))}${extra}</td>
     <td data-l="Valor" class="num">${brl(d.valor)}</td>
     <td data-l="Situação">${stBadge(d.status)}</td>
@@ -610,6 +631,11 @@ function formDespesa(v, d = null) {
         <div><label>Valor (R$) *</label><input name="valor" required inputmode="decimal" placeholder="0,00" value="${d ? String(d.valor).replace('.', ',') : ''}"></div>
         <div><label>Forma de pagamento</label><input name="forma_pagamento" list="dl-fp" maxlength="60" placeholder="Ex.: Cartão Itaú final 1234" value="${esc(d ? d.forma_pagamento || '' : '')}">
           <datalist id="dl-fp"></datalist></div>
+        <div><label>Cliente</label><select name="cliente_id" id="sel-cli"></select>
+          <div class="linha" id="novo-cli" hidden style="margin-top:.3rem"><input id="nome-cli" placeholder="Nome do novo cliente" maxlength="80" style="flex:1;min-width:140px">
+            <button type="button" class="btn peq" id="b-salvar-cli">Salvar</button><button type="button" class="btn peq link" id="b-cancel-cli">Cancelar</button></div></div>
+        <div><label>Cidade</label><input name="cidade" list="dl-cid" maxlength="80" placeholder="Ex.: Criciúma/SC" value="${esc(nomeCidade(S.cidades.find((c) => c.id === d?.cidade_id)))}">
+          <datalist id="dl-cid">${S.cidades.filter((c) => c.ativo).map((c) => `<option value="${esc(nomeCidade(c))}">`).join('')}</datalist></div>
         <div class="cheio"><label>Descrição</label><input name="descricao" value="${esc(d?.descricao)}" placeholder="Ex.: Almoço com cliente Infibra" maxlength="120"></div>
       </div>
       <div class="acoes"><button type="button" class="btn sec" data-fechar>Cancelar</button>
@@ -617,6 +643,33 @@ function formDespesa(v, d = null) {
         <button class="btn ok" data-envio="enviada">Salvar e enviar</button>` : '<button class="btn" data-envio="manter">Salvar alterações</button>'}</div>
     </form>`);
   const campo = (n) => box.querySelector(`[name="${n}"]`);
+  // clientes: lista + cadastro rápido
+  const ccViagem = S.centros.find((c) => c.id === v.centro_custo_id);
+  const desenharClientes = (sel) => {
+    const lista = S.centros.filter((c) => c.ativo || c.id === sel).sort((a, b) => (a.tipo === 'cliente' ? 0 : 1) - (b.tipo === 'cliente' ? 0 : 1) || a.nome.localeCompare(b.nome));
+    $('#sel-cli', box).innerHTML = '<option value="">—</option>' + lista.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.nome)}${c.tipo === 'cliente' ? '' : ' (centro de custo)'}</option>`).join('')
+      + '<option value="__novo">➕ Cadastrar novo cliente…</option>';
+  };
+  let clienteAtual = d ? d.cliente_id : (ccViagem && ccViagem.tipo === 'cliente' ? ccViagem.id : null);
+  desenharClientes(clienteAtual);
+  $('#sel-cli', box).onchange = (e) => {
+    if (e.target.value === '__novo') { $('#novo-cli', box).hidden = false; $('#nome-cli', box).focus(); e.target.value = clienteAtual || ''; }
+    else clienteAtual = e.target.value || null;
+  };
+  $('#b-cancel-cli', box).onclick = () => { $('#novo-cli', box).hidden = true; $('#nome-cli', box).value = ''; };
+  const salvarCliente = async () => {
+    const nome = $('#nome-cli', box).value.trim();
+    if (nome.length < 2) return aviso('Digite o nome do cliente.', true);
+    try {
+      const c = await q(sb.rpc('novo_cliente', { p_nome: nome }));
+      if (!S.centros.some((x) => x.id === c.id)) S.centros.push(c); else Object.assign(S.centros.find((x) => x.id === c.id), c);
+      clienteAtual = c.id; desenharClientes(c.id);
+      $('#novo-cli', box).hidden = true; $('#nome-cli', box).value = '';
+      aviso(`Cliente "${c.nome}" cadastrado.`);
+    } catch (err) { erro(err); }
+  };
+  $('#b-salvar-cli', box).onclick = salvarCliente;
+  $('#nome-cli', box).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); salvarCliente(); } };
   // sugestões de forma de pagamento: as já usadas + a da viagem + opções comuns
   (async () => {
     try {
@@ -629,7 +682,7 @@ function formDespesa(v, d = null) {
       }
     } catch (e) { console.error(e); }
   })();
-  ['data', 'valor', 'descricao', 'categoria_id'].forEach((n) => campo(n).addEventListener('input', () => editados.add(n)));
+  ['data', 'valor', 'descricao', 'categoria_id', 'cidade'].forEach((n) => campo(n).addEventListener('input', () => editados.add(n)));
 
   const desenharGrupo = (catPreferida) => {
     $$('#seg button', box).forEach((b) => b.classList.toggle('on', b.dataset.g === grupo));
@@ -675,6 +728,10 @@ function formDespesa(v, d = null) {
       $('.qr-emp', info).innerHTML = `🏢 <b>${esc(QRNota.nomeBonito(emp.nome))}</b>${emp.cidade ? ' — ' + esc(emp.cidade) : ''}${emp.atividade ? `<span class="suave"> · ${esc(emp.atividade)}</span>` : ''}`;
       if (pode('descricao') && (forcar || !campo('descricao').value || campo('descricao').classList.contains('lido'))) {
         campo('descricao').value = QRNota.nomeBonito(emp.nome).slice(0, 120); campo('descricao').classList.add('lido'); preenchidos.push('descrição');
+      }
+      if (emp.cidade && pode('cidade') && !campo('cidade').value) {
+        const [cid, uf] = emp.cidade.split('/');
+        campo('cidade').value = `${QRNota.nomeBonito(cid)}/${uf}`; campo('cidade').classList.add('lido'); preenchidos.push('cidade');
       }
       textoNota = `${emp.nome}\n${emp.razao}\n${emp.atividade}\n${textoNota}`;
       const antes = campo('categoria_id').value; sugerirCategoria();
@@ -773,6 +830,8 @@ function formDespesa(v, d = null) {
     try {
       const reg = { categoria_id: f.categoria_id, data: f.data, valor, descricao: f.descricao.trim() || null, centro_custo_id: v.centro_custo_id || null, forma_pagamento: (f.forma_pagamento || '').trim() || null };
       if (qrAtual) { reg.chave_nfe = qrAtual.chave; reg.nfe_url = qrAtual.url || null; }
+      reg.cliente_id = f.cliente_id && f.cliente_id !== '__novo' ? f.cliente_id : null;
+      reg.cidade_id = (f.cidade || '').trim() ? await obterCidade(f.cidade) : null;
       let id = d?.id;
       if (novo) {
         const r = await q(sb.from('despesas').insert({ ...reg, viagem_id: v.id, colaborador_id: S.eu.id, status: 'rascunho' }).select('id').single());
@@ -1072,7 +1131,7 @@ function celulaAbas(p) {
 
 async function telaAdmin(aba) {
   await carregarApoio();
-  const abas = { usuarios: 'Usuários', equipes: 'Equipes', centros: 'Centros de custo / clientes', categorias: 'Categorias' };
+  const abas = { usuarios: 'Usuários', equipes: 'Equipes', centros: 'Centros de custo / clientes', cidades: 'Cidades', categorias: 'Categorias' };
   let html = `<h1>Cadastros</h1><div class="abas">${Object.entries(abas).map(([k, t]) => `<button data-ab="${k}" class="${k === aba ? 'on' : ''}">${t}${k === 'usuarios' && S.perfis.some((p) => !p.ativo) ? `<span class="cont">${S.perfis.filter((p) => !p.ativo).length}</span>` : ''}</button>`).join('')}</div>`;
   if (aba === 'usuarios') {
     html += `<div class="card"><h3>🔗 Link de cadastro para novos colaboradores</h3>
@@ -1113,6 +1172,13 @@ async function telaAdmin(aba) {
         <td><select data-c="tipo"><option value="centro_custo" ${c.tipo === 'centro_custo' ? 'selected' : ''}>Centro de custo</option><option value="cliente" ${c.tipo === 'cliente' ? 'selected' : ''}>Cliente</option></select></td>
         <td><input type="checkbox" data-c="ativo" ${c.ativo ? 'checked' : ''}></td></tr>`).join('') || '<tr><td colspan="4" class="vazio">Nenhum cadastrado.</td></tr>'}
       </tbody></table></div>`;
+  } else if (aba === 'cidades') {
+    html += `<p class="suave peq">As cidades também são cadastradas automaticamente quando alguém digita uma cidade nova numa despesa. Aqui você corrige o nome ou desativa.</p>
+      <form class="card linha" id="f-novo"><input name="nome" placeholder="Cidade" required style="flex:1;min-width:160px"><input name="uf" placeholder="UF" maxlength="2" style="width:70px;text-transform:uppercase"><button class="btn">Adicionar</button></form>
+      <div class="tabela-wrap"><table class="t"><thead><tr><th>Cidade</th><th>UF</th><th>Ativa</th></tr></thead><tbody>
+      ${S.cidades.map((c) => `<tr data-cid="${c.id}"><td><input data-c="nome" value="${esc(c.nome)}"></td><td><input data-c="uf" value="${esc(c.uf || '')}" maxlength="2" style="width:70px;text-transform:uppercase"></td>
+        <td><input type="checkbox" data-c="ativo" ${c.ativo ? 'checked' : ''}></td></tr>`).join('') || '<tr><td colspan="3" class="vazio">Nenhuma cidade cadastrada ainda.</td></tr>'}
+      </tbody></table></div>`;
   } else {
     html += `<p class="suave peq">As categorias correspondem às colunas do relatório Quimicer e não podem ser criadas ou apagadas. Você pode renomear ou desativar.</p>
       <div class="tabela-wrap"><table class="t"><thead><tr><th>Quem pagou</th><th>Categoria</th><th>Coluna no Excel</th><th>Ativa</th></tr></thead><tbody>
@@ -1128,11 +1194,12 @@ async function telaAdmin(aba) {
     catch { $('#link-cad').select(); aviso('Selecione e copie o link.', true); }
   };
 
-  const tabelas = { p: 'perfis', e: 'equipes', cc: 'centros_custo', cat: 'categorias' };
+  const tabelas = { p: 'perfis', e: 'equipes', cc: 'centros_custo', cid: 'cidades', cat: 'categorias' };
   $$('[data-c]').forEach((el) => (el.onchange = async () => {
     const tr = el.closest('tr'); const k = Object.keys(tabelas).find((x) => tr.dataset[x] !== undefined);
     let val = el.type === 'checkbox' ? el.checked : el.value.trim();
     if (el.dataset.c.endsWith('_id') && !val) val = null;
+    if (el.dataset.c === 'uf') val = val.toUpperCase() || null;
     if (el.dataset.c === 'nome' && !val && k !== 'p') { aviso('O nome não pode ficar vazio.', true); return; }
     try { await q(sb.from(tabelas[k]).update({ [el.dataset.c]: val }).eq('id', tr.dataset[k])); aviso('Salvo.'); if (el.type === 'checkbox' || el.dataset.c === 'cargo') telaAdmin(aba); }
     catch (e) { erro(e); }
@@ -1142,7 +1209,8 @@ async function telaAdmin(aba) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
     Object.keys(f).forEach((k) => (f[k] = f[k].trim() || null));
-    try { await q(sb.from(aba === 'equipes' ? 'equipes' : 'centros_custo').insert(f)); aviso('Adicionado.'); telaAdmin(aba); }
+    if (aba === 'cidades' && f.uf) f.uf = f.uf.toUpperCase();
+    try { await q(sb.from(aba === 'equipes' ? 'equipes' : aba === 'cidades' ? 'cidades' : 'centros_custo').insert(f)); aviso('Adicionado.'); await carregarApoio(); telaAdmin(aba); }
     catch (err) { erro(/duplicate key/.test(err.message) ? new Error('Já existe um cadastro com esse nome/código.') : err); }
   };
 }
