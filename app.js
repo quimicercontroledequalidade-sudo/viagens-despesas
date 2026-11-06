@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.06-2';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.06-3';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -185,6 +185,8 @@ async function carregarApoio() {
   try { S.cidades = await q(sb.from('cidades').select('*').order('nome')); } catch { S.cidades = []; }
 }
 // cidades: "Criciúma/SC"
+const nomeCliente = (id) => (id ? S.centros.find((c) => c.id === id)?.nome || '' : '');
+const nomeCidadeId = (id) => (id ? nomeCidade(S.cidades.find((c) => c.id === id)) : '');
 const nomeCidade = (c) => (c ? c.nome + (c.uf ? '/' + c.uf : '') : '');
 function separarCidade(txt) {
   const m = String(txt || '').trim().replace(/\s+/g, ' ').match(/^(.*?)(?:\s*[\/\-–,]\s*([A-Za-z]{2}))?$/);
@@ -926,7 +928,9 @@ function dadosRelatorio(v, desp) {
     veiculo: v.veiculo_empresa, km_inicial: v.km_inicial, km_final: v.km_final,
     forma_pagamento: formas.length ? formas.join(' / ') : v.forma_pagamento, objetivos: v.objetivos,
     despesas: validas.map((d) => ({ data: d.data, coluna: d.categorias.coluna_relatorio, valor: d.valor,
-      descricao: (d.descricao || d.categorias.nome) + (formas.length > 1 && d.forma_pagamento ? ' - ' + d.forma_pagamento : '') })),
+      descricao: (d.descricao || d.categorias.nome)
+        + ((x) => (x ? ` (${x})` : ''))([nomeCliente(d.cliente_id), nomeCidadeId(d.cidade_id)].filter(Boolean).join(' · '))
+        + (formas.length > 1 && d.forma_pagamento ? ' - ' + d.forma_pagamento : '') })),
     pendentes: validas.filter((d) => d.status === 'rascunho').length,
   };
 }
@@ -1072,12 +1076,17 @@ async function telaRelatorios() {
   const f = JSON.parse(sessionStorage.getItem('filtroRel') || 'null') || {
     de: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('sv-SE'), ate: hoje(), colab: '', centro: '', status: 'validas',
   };
+  f.cliente = f.cliente || ''; f.cidade = f.cidade || '';
   let c = sb.from('despesas').select('*, categorias(nome, grupo, coluna_relatorio), viagens(id, titulo, destino, centro_custo_id)')
     .gte('data', f.de).lte('data', f.ate).order('data');
   if (f.colab) c = c.eq('colaborador_id', f.colab);
   if (f.status === 'validas') c = c.neq('status', 'recusada'); else if (f.status) c = c.eq('status', f.status);
   let lista = await q(c);
   if (f.centro) lista = lista.filter((d) => (d.centro_custo_id || d.viagens?.centro_custo_id) === f.centro);
+  if (f.cliente) lista = lista.filter((d) => (f.cliente === '-' ? !d.cliente_id : d.cliente_id === f.cliente));
+  if (f.cidade) lista = lista.filter((d) => (f.cidade === '-' ? !d.cidade_id : d.cidade_id === f.cidade));
+  const porCli = {};
+  lista.forEach((d) => { const k = nomeCliente(d.cliente_id) || 'Sem cliente'; porCli[k] = (porCli[k] || 0) + Number(d.valor); });
   const porCat = {};
   lista.forEach((d) => { const k = GRUPOS_CURTO[d.categorias.grupo] + ' — ' + d.categorias.nome; porCat[k] = (porCat[k] || 0) + Number(d.valor); });
   const total = lista.reduce((s, d) => s + Number(d.valor), 0);
@@ -1089,27 +1098,30 @@ async function telaRelatorios() {
       <div><label>Até</label><input type="date" name="ate" value="${esc(f.ate)}"></div>
       <div><label>Colaborador</label><select name="colab"><option value="">Todos</option>${pessoas.map((p) => `<option value="${p.id}" ${p.id === f.colab ? 'selected' : ''}>${esc(p.nome || p.email)}</option>`).join('')}</select></div>
       <div><label>Centro de custo / cliente</label><select name="centro"><option value="">Todos</option>${S.centros.map((x) => `<option value="${x.id}" ${x.id === f.centro ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>
+      <div><label>Cliente da despesa</label><select name="cliente"><option value="">Todos</option><option value="-" ${f.cliente === '-' ? 'selected' : ''}>Sem cliente</option>${S.centros.filter((x) => x.tipo === 'cliente').map((x) => `<option value="${x.id}" ${x.id === f.cliente ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>
+      <div><label>Cidade</label><select name="cidade"><option value="">Todas</option><option value="-" ${f.cidade === '-' ? 'selected' : ''}>Sem cidade</option>${S.cidades.map((x) => `<option value="${x.id}" ${x.id === f.cidade ? 'selected' : ''}>${esc(nomeCidade(x))}</option>`).join('')}</select></div>
       <div><label>Situação</label><select name="status">${[['validas', 'Todas exceto recusadas'], ['', 'Todas'], ...Object.entries(ST_DESP)].map(([k, t]) => `<option value="${k}" ${k === f.status ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     </div><div class="acoes"><button class="btn sec" type="button" id="b-xrel">⬇ Excel</button><button class="btn">Filtrar</button></div></form>
     ${lista.length ? `<div class="grade" style="margin-bottom:1rem">${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([k, val]) => `<div class="card" style="margin:0"><div class="peq suave">${esc(k)}</div><b>${brl(val)}</b></div>`).join('')}</div>
-    <div class="tabela-wrap"><table class="t"><thead><tr><th>Data</th><th>Viagem</th><th>Colaborador</th><th>Categoria</th><th>Descrição</th><th>Pagamento</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+    ${Object.keys(porCli).length > 1 || !porCli['Sem cliente'] ? `<h3 style="margin:.4rem 0">Por cliente</h3><div class="grade" style="margin-bottom:1rem">${Object.entries(porCli).sort((a, b) => b[1] - a[1]).map(([k, val]) => `<div class="card" style="margin:0"><div class="peq suave">🏢 ${esc(k)}</div><b>${brl(val)}</b></div>`).join('')}</div>` : ''}
+    <div class="tabela-wrap"><table class="t"><thead><tr><th>Data</th><th>Viagem</th><th>Colaborador</th><th>Categoria</th><th>Descrição</th><th>Cliente</th><th>Cidade</th><th>Pagamento</th><th class="num">Valor</th><th>Situação</th></tr></thead>
     <tbody>${lista.map((d) => `<tr><td>${dataBR(d.data)}</td><td><a href="#/viagem/${d.viagem_id}">${esc(d.viagens?.titulo || d.viagens?.destino || '—')}</a></td>
       <td>${esc(nomePerfil(d.colaborador_id))}</td><td>${esc(d.categorias.nome)}<div class="grupo-tag">${esc(GRUPOS_CURTO[d.categorias.grupo])}</div></td>
-      <td>${esc(d.descricao || '')}</td><td>${esc(d.forma_pagamento || '')}</td><td class="num">${brl(d.valor)}</td><td>${stBadge(d.status)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="6">Total (${lista.length} despesas)</td><td class="num">${brl(total)}</td><td></td></tr></tfoot></table></div>`
+      <td>${esc(d.descricao || '')}</td><td>${esc(nomeCliente(d.cliente_id))}</td><td>${esc(nomeCidadeId(d.cidade_id))}</td><td>${esc(d.forma_pagamento || '')}</td><td class="num">${brl(d.valor)}</td><td>${stBadge(d.status)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="8">Total (${lista.length} despesas)</td><td class="num">${brl(total)}</td><td></td></tr></tfoot></table></div>`
     : '<div class="vazio card">Nenhuma despesa no período.</div>'}`;
   $('#f-rel').onsubmit = (e) => { e.preventDefault(); sessionStorage.setItem('filtroRel', JSON.stringify(Object.fromEntries(new FormData(e.target)))); telaRelatorios(); };
   $('#b-xrel').onclick = async () => {
     const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Despesas');
     ws.columns = [{ header: 'Data', key: 'data', width: 12 }, { header: 'Viagem', key: 'viagem', width: 30 }, { header: 'Colaborador', key: 'colab', width: 24 },
       { header: 'Quem pagou', key: 'grupo', width: 18 }, { header: 'Categoria', key: 'cat', width: 22 }, { header: 'Descrição', key: 'desc', width: 36 },
-      { header: 'Forma de pagamento', key: 'fp', width: 24 }, { header: 'Valor (R$)', key: 'valor', width: 14 }, { header: 'Situação', key: 'st', width: 12 }];
+      { header: 'Cliente', key: 'cli', width: 26 }, { header: 'Cidade', key: 'cid', width: 22 }, { header: 'Forma de pagamento', key: 'fp', width: 24 }, { header: 'Valor (R$)', key: 'valor', width: 14 }, { header: 'Situação', key: 'st', width: 12 }];
     lista.forEach((d) => {
       const [y, m, dd] = d.data.split('-').map(Number);
-      ws.addRow({ data: new Date(Date.UTC(y, m - 1, dd)), viagem: d.viagens?.titulo || d.viagens?.destino || '', colab: nomePerfil(d.colaborador_id), grupo: GRUPOS_CURTO[d.categorias.grupo], cat: d.categorias.nome, desc: d.descricao || '', fp: d.forma_pagamento || '', valor: Number(d.valor), st: ST_DESP[d.status] });
+      ws.addRow({ data: new Date(Date.UTC(y, m - 1, dd)), viagem: d.viagens?.titulo || d.viagens?.destino || '', colab: nomePerfil(d.colaborador_id), grupo: GRUPOS_CURTO[d.categorias.grupo], cat: d.categorias.nome, desc: d.descricao || '', cli: nomeCliente(d.cliente_id), cid: nomeCidadeId(d.cidade_id), fp: d.forma_pagamento || '', valor: Number(d.valor), st: ST_DESP[d.status] });
     });
     const ult = lista.length + 1;
-    ws.addRow({ desc: 'TOTAL', valor: { formula: `SUM(H2:H${ult})` } }).font = { bold: true };
+    ws.addRow({ desc: 'TOTAL', valor: { formula: `SUM(J2:J${ult})` } }).font = { bold: true };
     ws.getColumn('data').numFmt = 'dd/mm/yyyy'; ws.getColumn('valor').numFmt = '#,##0.00';
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF009999' } };
