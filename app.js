@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.05-7';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.06-1';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -490,7 +490,7 @@ function linhaDespesa(d, extra = '') {
   botoes.push(`<button class="btn peq link" data-acao="historico" data-id="${d.id}">Histórico</button>`);
   return `<tr>
     <td data-l="Data">${dataBR(d.data)}</td>
-    <td data-l="Descrição">${esc(d.descricao || '')}
+    <td data-l="Descrição">${esc(d.descricao || '')}${d.chave_nfe ? ` <a class="peq" href="${esc(d.nfe_url || 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx')}" target="_blank" rel="noopener" title="Chave ${esc(d.chave_nfe)}">🧾 ver nota</a>` : ''}
       <div class="anexos">${(d.anexos || []).map((a) => `<button class="anexo" data-anexo="${esc(a.caminho)}" data-tipo="${esc(a.tipo_arquivo || '')}">📎 ${esc(a.nome_arquivo.slice(0, 22))}</button>`).join('') || (d.status === 'rascunho' || d.status === 'recusada' ? '<span class="peq suave">sem comprovante</span>' : '')}</div>
       ${d.status === 'recusada' && d.motivo_recusa ? `<div class="peq" style="color:var(--perigo)">Motivo: ${esc(d.motivo_recusa)}</div>` : ''}
     </td>
@@ -585,6 +585,7 @@ function formDespesa(v, d = null) {
   const removidos = [];
   let arquivos = [];
   let textoNota = '';
+  let qrAtual = null; // dados do QR Code lido (chave de acesso, CNPJ, data, valor, link SEFAZ)
   const editados = new Set(); // campos que a pessoa mexeu à mão (a leitura automática não sobrescreve)
   // rascunho/recusada: pode salvar como rascunho ou enviar. Enviada/aprovada/paga: só salvar alterações.
   const fluxoEnvio = novo || ['rascunho', 'recusada'].includes(d.status);
@@ -594,7 +595,10 @@ function formDespesa(v, d = null) {
     <form id="f-d">
       <label>1. Foto ou PDF da nota fiscal / recibo *</label>
       <input type="file" id="arq" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple>
+      <div class="linha" style="margin-top:.35rem"><button type="button" class="btn sec peq" id="b-qr">📷 Ler QR Code da nota</button>
+        <span class="peq suave">mais rápido e certeiro para NFC-e / cupom fiscal</span></div>
       <div class="anexos" id="lista-anexos"></div>
+      <div class="qr-info peq" id="qr-info" hidden></div>
       <div class="linha" style="margin-top:.35rem"><span class="peq suave" id="ocr-status">Anexe a foto ou o PDF: o app lê a nota e preenche os campos para você conferir.</span>
         <button type="button" class="btn link peq" id="b-ler" hidden>🔎 Ler a nota de novo</button></div>
       <label>2. Quem pagou?</label>
@@ -649,9 +653,41 @@ function formDespesa(v, d = null) {
     $('#b-ler', box).hidden = !arquivos.length;
   };
 
+  // Usa os dados do QR Code da nota: confere duplicidade, data, valor e nome da empresa pelo CNPJ
+  const aplicarQR = async (qr, forcar = false) => {
+    qrAtual = qr;
+    const info = $('#qr-info', box); info.hidden = false;
+    const link = qr.url ? ` · <a href="${esc(qr.url)}" target="_blank" rel="noopener">ver na SEFAZ</a>` : '';
+    const cab = `🧾 <b>${esc(qr.modelo)}${qr.numero ? ' nº ' + qr.numero : ''}</b> · CNPJ ${esc(QRNota.cnpjFormatado(qr.cnpj))}${qr.uf ? ' · ' + qr.uf : ''}${link}`;
+    info.innerHTML = `<div>${cab}</div><div class="qr-emp"></div>` + (qr.valida ? '' : '<div style="color:var(--perigo)">⚠️ A chave da nota não confere. Leia o QR de novo.</div>');
+    const pode = (n) => forcar || !editados.has(n);
+    const preenchidos = [];
+    if (qr.data && pode('data')) { campo('data').value = qr.data; preenchidos.push('data'); }
+    if (qr.valor && pode('valor')) { campo('valor').value = qr.valor.toFixed(2).replace('.', ','); preenchidos.push('valor'); }
+    preenchidos.forEach((n) => campo(n).classList.add('lido'));
+    // a mesma nota já foi lançada?
+    try {
+      const { data: dup } = await sb.rpc('nota_ja_lancada', { p_chave: qr.chave, p_ignorar: d?.id || null });
+      if (dup && dup.length) info.insertAdjacentHTML('beforeend', `<div style="color:var(--perigo)">⚠️ <b>Esta nota já foi lançada</b>${dup[0].quem ? ' por ' + esc(dup[0].quem) : ''} em ${dataBR(dup[0].data)} (${brl(dup[0].valor)}).</div>`);
+    } catch (e) { console.warn(e); }
+    const emp = await QRNota.buscarEmpresa(qr.cnpj);
+    if (emp && emp.nome) {
+      $('.qr-emp', info).innerHTML = `🏢 <b>${esc(QRNota.nomeBonito(emp.nome))}</b>${emp.cidade ? ' — ' + esc(emp.cidade) : ''}${emp.atividade ? `<span class="suave"> · ${esc(emp.atividade)}</span>` : ''}`;
+      if (pode('descricao') && (forcar || !campo('descricao').value || campo('descricao').classList.contains('lido'))) {
+        campo('descricao').value = QRNota.nomeBonito(emp.nome).slice(0, 120); campo('descricao').classList.add('lido'); preenchidos.push('descrição');
+      }
+      textoNota = `${emp.nome}\n${emp.razao}\n${emp.atividade}\n${textoNota}`;
+      const antes = campo('categoria_id').value; sugerirCategoria();
+      if (campo('categoria_id').value !== antes) preenchidos.push('categoria');
+    }
+    return preenchidos;
+  };
+
   // Lê a foto da nota e preenche os campos (sem apagar o que a pessoa já digitou)
   const lerNota = async (file, forcar = false) => {
     const st = $('#ocr-status', box);
+    st.textContent = '🔎 Procurando o QR Code da nota…';
+    const qr = await QRNota.lerArquivo(file);
     st.textContent = '🔎 Lendo a nota… (na primeira vez pode levar alguns segundos)';
     try {
       textoNota = await LeitorNota.lerArquivo(file, (p) => { st.textContent = `🔎 Lendo a nota… ${Math.round(p * 100)}%`; });
@@ -665,12 +701,18 @@ function formDespesa(v, d = null) {
       const antes = campo('categoria_id').value; sugerirCategoria();
       if (campo('categoria_id').value !== antes || (r.categoria && preenchidos.length)) preenchidos.push('categoria');
       ['data', 'valor', 'descricao'].forEach((n) => campo(n).classList.toggle('lido', preenchidos.includes(n === 'descricao' ? 'descrição' : n)));
+      if (qr) {
+        // o QR é mais confiável: data e valor dele substituem os lidos na foto
+        if (qr.data) editados.delete('data'); if (qr.valor) editados.delete('valor');
+        (await aplicarQR(qr, forcar)).forEach((n) => { if (!preenchidos.includes(n)) preenchidos.push(n); });
+      }
       st.innerHTML = preenchidos.length
-        ? `✅ Preenchido pela leitura da nota: <b>${preenchidos.join(', ')}</b>. <b>Confira</b> antes de salvar.`
+        ? `✅ Preenchido pela leitura da nota${qr ? ' e do QR Code' : ''}: <b>${preenchidos.join(', ')}</b>. <b>Confira</b> antes de salvar.`
         : '⚠️ Não consegui ler os dados desta foto. Preencha os campos (tente uma foto mais nítida, reta e com boa luz).';
     } catch (e) {
       console.error(e);
-      st.textContent = '⚠️ Não foi possível ler esta foto automaticamente. Preencha os campos.';
+      if (qr) { await aplicarQR(qr, forcar); st.innerHTML = '✅ QR Code lido. <b>Confira</b> os campos antes de salvar.'; }
+      else st.textContent = '⚠️ Não foi possível ler esta foto automaticamente. Preencha os campos.';
     }
   };
 
@@ -705,6 +747,16 @@ function formDespesa(v, d = null) {
     // lê automaticamente a primeira foto de um lançamento novo
     if (novos.length && novo && arquivos.length === novos.length) lerNota(fonteLeitura.get(novos[0]) || novos[0]);
   };
+  $('#b-qr', box).onclick = async () => {
+    const st = $('#ocr-status', box);
+    const r = await QRNota.lerCamera();
+    if (!r) return;
+    arquivos.push(r.foto); desenharAnexos();
+    st.textContent = '🔎 QR Code lido. Buscando os dados da empresa…';
+    const pre = await aplicarQR(r.qr, true);
+    st.innerHTML = `✅ QR Code lido${pre.length ? ': <b>' + pre.join(', ') + '</b>' : ''}. ${r.qr.valor ? '' : 'Este tipo de QR não traz o valor: <b>digite o valor</b> (ou toque em “ver na SEFAZ”). '}A foto do QR ficou como comprovante, e você pode anexar também a foto da nota inteira.`;
+    if (!r.qr.valor) campo('valor').focus();
+  };
   $('#b-ler', box).onclick = () => { const a = arquivos[arquivos.length - 1]; if (a) lerNota(fonteLeitura.get(a) || a, true); };
   desenharGrupo(); desenharAnexos();
 
@@ -720,6 +772,7 @@ function formDespesa(v, d = null) {
     const btns = $$('button', box); btns.forEach((b) => (b.disabled = true));
     try {
       const reg = { categoria_id: f.categoria_id, data: f.data, valor, descricao: f.descricao.trim() || null, centro_custo_id: v.centro_custo_id || null, forma_pagamento: (f.forma_pagamento || '').trim() || null };
+      if (qrAtual) { reg.chave_nfe = qrAtual.chave; reg.nfe_url = qrAtual.url || null; }
       let id = d?.id;
       if (novo) {
         const r = await q(sb.from('despesas').insert({ ...reg, viagem_id: v.id, colaborador_id: S.eu.id, status: 'rascunho' }).select('id').single());

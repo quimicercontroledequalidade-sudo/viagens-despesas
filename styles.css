@@ -196,3 +196,13 @@ body.dev-outro > .topo, body.dev-outro > .app, body.dev-outro > .rodape, body.de
 .dev-aviso p { color: var(--suave); }
 @media (max-width: 560px) { .dev-titulo { display: none; } }
 @media print { .dev-barra, .dev-area { display: none !important; } }
+
+/* ---------- leitor de QR Code da nota ---------- */
+.qr-info { margin-top: .4rem; padding: .5rem .65rem; background: #eef8f7; border: 1px solid #cfe7e4; border-radius: 8px; line-height: 1.45; }
+.qr-info a { color: var(--prim, #007a7a); }
+.qr-camada { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.qr-caixa { position: relative; width: min(520px, 100%); text-align: center; color: #fff; }
+.qr-caixa video { width: 100%; max-height: 70dvh; object-fit: cover; border-radius: 12px; background: #000; display: block; }
+.qr-mira { position: absolute; left: 50%; top: 50%; width: 58%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid #4fd1c5; border-radius: 14px; pointer-events: none; }
+.qr-msg { margin: .8rem 0; font-size: 1rem; }
+.qr-video { position: relative; }

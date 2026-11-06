@@ -8,8 +8,8 @@
     [/BOLETO/, { diversos: 'Boletos' }],
     [/PED[AÁ]GIO|AUTOBAN|ECOVIAS|ARTERIS|AUTOPISTA|CONCESSION[AÁ]RIA|RODOVIA|PRA[CÇ]A DE|TARIFA|CCR\b|TRIUNFO|ECOSUL|VIAPAR/, { empresa: 'Pedágio', funcionario: 'Outros', diversos: 'Sem Parar (pedágio)' }],
     [/POSTO|COMBUST|GASOLINA|ETANOL|DIESEL|[ÁA]LCOOL|ABASTEC|PETROBRAS|IPIRANGA|SHELL|\bBR\b|LITRO|\bLTS?\b/, { empresa: 'Combustível', funcionario: 'Combustível', diversos: 'Posto Imola' }],
-    [/HOTEL|POUSADA|HOSPEDAGEM|DI[AÁ]RIA|HOSPEDE|H[OÓ]SPEDE|INN\b|MOTEL|FLAT/, { empresa: 'Hospedagem', funcionario: 'Hospedagem' }],
-    [/A[EÉ]REA|AIRLINES|LATAM|\bGOL\b|AZUL|PASSAGEM A|BILHETE A|VOO\b/, { empresa: 'Avião', funcionario: 'Avião', diversos: 'Avião compra antecipada' }],
+    [/HOTEL|HOT[EÉ]IS|POUSADA|HOSPEDAGEM|DI[AÁ]RIA|HOSPEDE|H[OÓ]SPEDE|INN\b|MOTEL|FLAT/, { empresa: 'Hospedagem', funcionario: 'Hospedagem' }],
+    [/A[EÉ]REA|A[EÉ]REO|AIRLINES|LATAM|\bGOL\b|AZUL|PASSAGEM A|BILHETE A|VOO\b/, { empresa: 'Avião', funcionario: 'Avião', diversos: 'Avião compra antecipada' }],
     [/ESTACIONAMENTO|ESTAPAR|PARKING|PARK\b|ZONA AZUL/, { empresa: 'Diversos', funcionario: 'Outros' }],
     [/TELEFON|CELULAR|RECARGA|\bVIVO\b|\bCLARO\b|\bTIM\b/, { funcionario: 'Telefone', empresa: 'Diversos' }],
     [/UBER|99\s?(POP|T[AÁ]XI|APP)|T[AÁ]XI|TAXI/, { funcionario: 'Outros', empresa: 'Diversos' }],
@@ -195,6 +195,6 @@
     return pdf ? lerPdf(file, aoProgresso) : lerImagem(file, aoProgresso);
   }
 
-  const api = { interpretar, lerImagem, lerPdf, lerArquivo, sugerirCategoria };
+  const api = { interpretar, lerImagem, lerPdf, lerArquivo, sugerirCategoria, carregarPdfJs };
   if (typeof module !== 'undefined') module.exports = api; else root.LeitorNota = api;
 })(typeof window !== 'undefined' ? window : globalThis);
