@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.06-3';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.06-4';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -193,6 +193,16 @@ function separarCidade(txt) {
   return { nome: (m ? m[1] : txt).trim(), uf: m && m[2] ? m[2].toUpperCase() : null };
 }
 const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+// cliente digitado: usa o cadastro existente (mesmo nome) ou cadastra um novo
+async function obterCliente(txt) {
+  const nome = String(txt || '').trim().replace(/\s+/g, ' ');
+  if (nome.length < 2) return null;
+  const achado = S.centros.find((c) => semAcento(c.nome) === semAcento(nome));
+  if (achado) return achado.id;
+  const c = await q(sb.rpc('novo_cliente', { p_nome: nome }));
+  if (!S.centros.some((x) => x.id === c.id)) S.centros.push(c);
+  return c.id;
+}
 async function obterCidade(txt) {
   const { nome, uf } = separarCidade(txt);
   if (nome.length < 2) return null;
@@ -633,9 +643,9 @@ function formDespesa(v, d = null) {
         <div><label>Valor (R$) *</label><input name="valor" required inputmode="decimal" placeholder="0,00" value="${d ? String(d.valor).replace('.', ',') : ''}"></div>
         <div><label>Forma de pagamento</label><input name="forma_pagamento" list="dl-fp" maxlength="60" placeholder="Ex.: Cartão Itaú final 1234" value="${esc(d ? d.forma_pagamento || '' : '')}">
           <datalist id="dl-fp"></datalist></div>
-        <div><label>Cliente</label><select name="cliente_id" id="sel-cli"></select>
-          <div class="linha" id="novo-cli" hidden style="margin-top:.3rem"><input id="nome-cli" placeholder="Nome do novo cliente" maxlength="80" style="flex:1;min-width:140px">
-            <button type="button" class="btn peq" id="b-salvar-cli">Salvar</button><button type="button" class="btn peq link" id="b-cancel-cli">Cancelar</button></div></div>
+        <div><label>Cliente</label><input name="cliente" list="dl-cli" maxlength="80" placeholder="Digite ou escolha o cliente"
+            value="${esc(d ? nomeCliente(d.cliente_id) : ((c) => (c && c.tipo === 'cliente' ? c.nome : ''))(S.centros.find((c) => c.id === v.centro_custo_id)))}">
+          <datalist id="dl-cli">${S.centros.filter((c) => c.ativo && c.tipo === 'cliente').map((c) => `<option value="${esc(c.nome)}">`).join('')}</datalist></div>
         <div><label>Cidade</label><input name="cidade" list="dl-cid" maxlength="80" placeholder="Ex.: Criciúma/SC" value="${esc(nomeCidade(S.cidades.find((c) => c.id === d?.cidade_id)))}">
           <datalist id="dl-cid">${S.cidades.filter((c) => c.ativo).map((c) => `<option value="${esc(nomeCidade(c))}">`).join('')}</datalist></div>
         <div class="cheio"><label>Descrição</label><input name="descricao" value="${esc(d?.descricao)}" placeholder="Ex.: Almoço com cliente Infibra" maxlength="120"></div>
@@ -645,33 +655,7 @@ function formDespesa(v, d = null) {
         <button class="btn ok" data-envio="enviada">Salvar e enviar</button>` : '<button class="btn" data-envio="manter">Salvar alterações</button>'}</div>
     </form>`);
   const campo = (n) => box.querySelector(`[name="${n}"]`);
-  // clientes: lista + cadastro rápido
-  const ccViagem = S.centros.find((c) => c.id === v.centro_custo_id);
-  const desenharClientes = (sel) => {
-    const lista = S.centros.filter((c) => c.ativo || c.id === sel).sort((a, b) => (a.tipo === 'cliente' ? 0 : 1) - (b.tipo === 'cliente' ? 0 : 1) || a.nome.localeCompare(b.nome));
-    $('#sel-cli', box).innerHTML = '<option value="">—</option>' + lista.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.nome)}${c.tipo === 'cliente' ? '' : ' (centro de custo)'}</option>`).join('')
-      + '<option value="__novo">➕ Cadastrar novo cliente…</option>';
-  };
-  let clienteAtual = d ? d.cliente_id : (ccViagem && ccViagem.tipo === 'cliente' ? ccViagem.id : null);
-  desenharClientes(clienteAtual);
-  $('#sel-cli', box).onchange = (e) => {
-    if (e.target.value === '__novo') { $('#novo-cli', box).hidden = false; $('#nome-cli', box).focus(); e.target.value = clienteAtual || ''; }
-    else clienteAtual = e.target.value || null;
-  };
-  $('#b-cancel-cli', box).onclick = () => { $('#novo-cli', box).hidden = true; $('#nome-cli', box).value = ''; };
-  const salvarCliente = async () => {
-    const nome = $('#nome-cli', box).value.trim();
-    if (nome.length < 2) return aviso('Digite o nome do cliente.', true);
-    try {
-      const c = await q(sb.rpc('novo_cliente', { p_nome: nome }));
-      if (!S.centros.some((x) => x.id === c.id)) S.centros.push(c); else Object.assign(S.centros.find((x) => x.id === c.id), c);
-      clienteAtual = c.id; desenharClientes(c.id);
-      $('#novo-cli', box).hidden = true; $('#nome-cli', box).value = '';
-      aviso(`Cliente "${c.nome}" cadastrado.`);
-    } catch (err) { erro(err); }
-  };
-  $('#b-salvar-cli', box).onclick = salvarCliente;
-  $('#nome-cli', box).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); salvarCliente(); } };
+  const formEl = $('#f-d', box);
   // sugestões de forma de pagamento: as já usadas + a da viagem + opções comuns
   (async () => {
     try {
@@ -710,6 +694,7 @@ function formDespesa(v, d = null) {
 
   // Usa os dados do QR Code da nota: confere duplicidade, data, valor e nome da empresa pelo CNPJ
   const aplicarQR = async (qr, forcar = false) => {
+    if (!formEl.isConnected) return []; // a janela já foi fechada
     qrAtual = qr;
     const info = $('#qr-info', box); info.hidden = false;
     const link = qr.url ? ` · <a href="${esc(qr.url)}" target="_blank" rel="noopener">ver na SEFAZ</a>` : '';
@@ -750,6 +735,7 @@ function formDespesa(v, d = null) {
     st.textContent = '🔎 Lendo a nota… (na primeira vez pode levar alguns segundos)';
     try {
       textoNota = await LeitorNota.lerArquivo(file, (p) => { st.textContent = `🔎 Lendo a nota… ${Math.round(p * 100)}%`; });
+      if (!formEl.isConnected) return; // a janela já foi fechada
       const r = LeitorNota.interpretar(textoNota, grupo, hoje());
       const preenchidos = [];
       const pode = (n) => forcar || !editados.has(n);
@@ -832,7 +818,7 @@ function formDespesa(v, d = null) {
     try {
       const reg = { categoria_id: f.categoria_id, data: f.data, valor, descricao: f.descricao.trim() || null, centro_custo_id: v.centro_custo_id || null, forma_pagamento: (f.forma_pagamento || '').trim() || null };
       if (qrAtual) { reg.chave_nfe = qrAtual.chave; reg.nfe_url = qrAtual.url || null; }
-      reg.cliente_id = f.cliente_id && f.cliente_id !== '__novo' ? f.cliente_id : null;
+      reg.cliente_id = (f.cliente || '').trim() ? await obterCliente(f.cliente) : null;
       reg.cidade_id = (f.cidade || '').trim() ? await obterCidade(f.cidade) : null;
       let id = d?.id;
       if (novo) {
