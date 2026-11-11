@@ -9,7 +9,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ESTANTES = {
   laranja: 'Estante Laranja', amarela: 'Estante Amarela', azul: 'Estante Azul', verde: 'Estante Verde', branca: 'Estante Branca',
 };
-const S = { sessao: null, eu: null, amostras: [], filtro: { busca: '', estante: '', prateleira: '', situacao: 'ativa', validade: '' }, limite: 150 };
+// nome do fornecedor/fabricante padronizado para o filtro (ignora espaços e maiúsculas)
+const nomeForn = (t) => String(t || '').trim().replace(/\s+/g, ' ').toUpperCase();
+const S = { sessao: null, eu: null, amostras: [], filtro: { busca: '', estante: '', prateleira: '', fornecedor: '', situacao: 'ativa', validade: '' }, limite: 150 };
 
 // ---------- utilitários ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -93,6 +95,7 @@ function filtrar() {
     if (f.situacao && a.situacao !== f.situacao) return false;
     if (f.estante && (a.estante || 'nenhuma') !== f.estante) return false;
     if (f.prateleira && a.prateleira !== f.prateleira) return false;
+    if (f.fornecedor && !sem(a.fabricante).includes(sem(f.fornecedor).trim())) return false;
     if (f.validade) {
       const s = statusValidade(a).k;
       if (f.validade === 'corrigir') { if (!(a.fab_texto || a.val_texto)) return false; }
@@ -121,6 +124,9 @@ function telaLista() {
   ativas.forEach((a) => { const k = a.estante || 'nenhuma'; porEstante[k] = (porEstante[k] || 0) + 1; });
   const f = S.filtro;
   const prateleiras = [...new Set(S.amostras.map((a) => a.prateleira).filter(Boolean))].sort();
+  const contForn = {};
+  S.amostras.forEach((a) => { const n = nomeForn(a.fabricante); if (n && (!f.situacao || (a.situacao || 'ativa') === f.situacao)) contForn[n] = (contForn[n] || 0) + 1; });
+  const fornecedores = Object.keys(contForn).sort((x, y) => x.localeCompare(y, 'pt-BR'));
   const card = (chave, rot, val, sit, vld) => `<button data-atalho="${chave}" data-sit="${sit}" data-vld="${vld}" class="${f.situacao === sit && f.validade === vld ? 'on' : ''}">
     <span class="peq suave">${rot}</span><b>${val}</b></button>`;
 
@@ -142,6 +148,8 @@ function telaLista() {
     <div class="filtros">
       <input class="busca" id="busca" type="search" placeholder="🔎 Buscar por número, produto, fabricante, finalidade…" value="${esc(f.busca)}">
       <select id="f-prat"><option value="">Todas as prateleiras</option>${prateleiras.map((p) => `<option ${p === f.prateleira ? 'selected' : ''}>${p}</option>`).join('')}</select>
+      <input id="f-forn" list="dl-forn" placeholder="🏭 Fornecedor…" value="${esc(f.fornecedor)}" autocomplete="off">
+      <datalist id="dl-forn">${fornecedores.filter((n) => n !== '(?)').map((n) => `<option value="${esc(n)}">${contForn[n]} amostra(s)</option>`).join('')}</datalist>
       <select id="f-sit"><option value="ativa" ${f.situacao === 'ativa' ? 'selected' : ''}>Só ativas</option><option value="acabou" ${f.situacao === 'acabou' ? 'selected' : ''}>Só as que acabaram</option><option value="" ${!f.situacao ? 'selected' : ''}>Ativas e acabadas</option></select>
       <select id="f-val"><option value="">Qualquer validade</option>
         ${[['vencida', 'Vencidas'], ['vence', 'Vencem em 30 dias'], ['ok', 'No prazo'], ['corrigir', 'Data a corrigir'], ['sem', 'Sem validade']].map(([k, t]) => `<option value="${k}" ${f.validade === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
@@ -151,10 +159,11 @@ function telaLista() {
   desenharTabela();
   $('#busca').oninput = (e) => { S.filtro.busca = e.target.value; S.limite = 150; desenharTabela(); };
   $('#f-prat').onchange = (e) => { S.filtro.prateleira = e.target.value; S.limite = 150; telaLista(); };
+  $('#f-forn').oninput = (e) => { S.filtro.fornecedor = e.target.value; S.limite = 150; desenharTabela(); };
   $('#f-sit').onchange = (e) => { S.filtro.situacao = e.target.value; S.limite = 150; telaLista(); };
   $('#f-val').onchange = (e) => { S.filtro.validade = e.target.value; S.limite = 150; telaLista(); };
   $$('[data-est]').forEach((b) => (b.onclick = () => { S.filtro.estante = b.dataset.est; S.limite = 150; telaLista(); }));
-  $$('[data-atalho]').forEach((b) => (b.onclick = () => { Object.assign(S.filtro, { situacao: b.dataset.sit, validade: b.dataset.vld, estante: '', prateleira: '', busca: '' }); S.limite = 150; telaLista(); }));
+  $$('[data-atalho]').forEach((b) => (b.onclick = () => { Object.assign(S.filtro, { situacao: b.dataset.sit, validade: b.dataset.vld, estante: '', prateleira: '', fornecedor: '', busca: '' }); S.limite = 150; telaLista(); }));
   $('#b-nova') && ($('#b-nova').onclick = () => formAmostra());
   $('#b-excel').onclick = exportarExcel;
   const busca = $('#busca'); if (document.activeElement !== busca && S.filtro.busca) { busca.focus(); busca.setSelectionRange(busca.value.length, busca.value.length); }
