@@ -1,0 +1,79 @@
+/* Farol de Indicadores — complementa amostras.css */
+:root { --f-ok: #339933; --f-atencao: #ffff00; --f-critico: #c00000; --f-sem: #f1f1ef; --f-dest: #ffe699; }
+.app { max-width: 1280px; }
+select#s-ano, select#s-mes { width: auto; min-width: 110px; }
+
+/* luzes do farol */
+.luz { display: inline-block; padding: .15rem .55rem; border-radius: 99px; font-size: .8rem; font-weight: 700; white-space: nowrap; border: 1px solid rgba(0,0,0,.12); }
+.luz.ok, .placar-score.ok, .bolinha.ok { background: var(--f-ok); color: #fff; }
+.luz.atencao, .placar-score.atencao, .bolinha.atencao { background: var(--f-atencao); color: #3b3400; }
+.luz.critico, .placar-score.critico, .bolinha.critico { background: var(--f-critico); color: #fff; }
+.luz.sem, .placar-score.sem, .bolinha.sem { background: var(--f-sem); color: #555; }
+
+/* placar */
+.placar { display: grid; grid-template-columns: 230px 1fr; gap: .7rem; margin-bottom: .9rem; }
+.placar-score { border-radius: var(--raio); padding: .9rem 1rem; display: flex; flex-direction: column; justify-content: center; border: 1px solid rgba(0,0,0,.1); }
+.placar-score b { font-size: 2.2rem; line-height: 1.1; }
+.placar-inds { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .5rem; }
+.placar-ind { background: #fff; border: 1px solid var(--borda); border-radius: var(--raio); padding: .55rem .7rem; display: flex; gap: .6rem; align-items: flex-start; }
+.bolinha { width: 22px; height: 22px; border-radius: 50%; flex: none; margin-top: .15rem; border: 1px solid rgba(0,0,0,.2); box-shadow: inset 0 -3px 6px rgba(0,0,0,.15); }
+@media (max-width: 700px) { .placar { grid-template-columns: 1fr; } }
+
+/* lançamento do mês */
+.lanc { display: grid; gap: .5rem; margin-top: .7rem; }
+.lanc-l { display: grid; grid-template-columns: 1fr 130px 190px; gap: .7rem; align-items: center; padding: .55rem 0; border-top: 1px solid var(--borda); }
+.lanc-v { font-size: 1.1rem; text-align: right; background: #fffbe6; border-color: #e6c84f; }
+.lanc-v.invalido { outline: 2px solid var(--perigo); }
+@media (max-width: 640px) { .lanc-l { grid-template-columns: 1fr 110px; } .lanc-st { grid-column: 1 / -1; display: flex; gap: .5rem; align-items: center; } }
+
+/* tabela do ano */
+table.tf { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.tf th { text-align: left; background: var(--teal-claro); color: var(--teal-esc); padding: .5rem .6rem; white-space: nowrap; }
+table.tf td { padding: .45rem .6rem; border-top: 1px solid var(--borda); vertical-align: top; }
+table.farol td:first-child { min-width: 220px; }
+table.farol td.peq { white-space: nowrap; }
+table.farol th.num, table.farol td.num { text-align: right; font-weight: 400; }
+table.farol th.dest { background: #f5d76e; color: #3b3400; }
+table.farol td.dest { background: #fff3c4; font-weight: 700; }
+table.farol tbody tr { cursor: default; }
+table.farol td[data-mes] { cursor: pointer; }
+table.farol td[data-mes]:hover { outline: 1px solid var(--teal); }
+table.farol tfoot td { border-top: 2px solid var(--borda); background: #f6f8f8; font-weight: 600; padding: .45rem .6rem; }
+table.farol td.alerta { color: var(--perigo); }
+table.cfg input, table.cfg select { min-width: 0; }
+table.cfg td:first-child input { min-width: 220px; }
+.modal-box:has(#f-cfg) { max-width: 860px; }
+
+/* impressão: réplica do modelo, paisagem, 1 página */
+.impressao { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 9mm; }
+  body > *:not(.impressao) { display: none !important; }
+  body { background: #fff; }
+  .impressao { display: block; }
+  .imp { width: 100%; overflow: hidden; font-family: Calibri, Arial, sans-serif; font-size: 9pt; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .imp-logo { height: 22px; margin-bottom: 4px; }
+  .imp-tit { background: #dce9fa; font-weight: 700; padding: 3px 6px; font-size: 10.5pt; }
+  .imp-okr { font-style: italic; color: #444; margin: 3px 0; }
+  .imp-resp { margin: 2px 0; }
+  .imp-nota { font-style: italic; color: #777; font-size: 7.5pt; margin-bottom: 4px; }
+  .imp-t { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .imp-t th { background: #184f95; color: #fff; font-weight: 700; padding: 4px 2px; border: 1px solid #9aa; font-size: 8pt; }
+  .imp-t th:first-child { width: 21%; } .imp-t th:nth-child(2) { width: 4.2%; } .imp-t th:nth-child(3) { width: 6.5%; }
+  .imp-t th:nth-last-child(1) { width: 8%; } .imp-t th:nth-last-child(2), .imp-t th:nth-last-child(3) { width: 6%; }
+  .imp-t th.dest { background: #184f95; }
+  .imp-t td { border: 1px solid #b8c0c4; padding: 4px 3px; text-align: right; height: 22px; }
+  .imp-t td.nome { text-align: left; }
+  .imp-t td.dir { text-align: left; font-size: 7pt; color: #555; }
+  .imp-t td.val { background: #fffde7; }
+  .imp-t td.dest { background: #ffe699; }
+  .imp-t td.stf { text-align: center; font-weight: 700; font-size: 7.5pt; padding: 2px; }
+  .imp-t td.stf.ok { background: #339933; color: #fff; } .imp-t td.stf.atencao { background: #ffff00; } .imp-t td.stf.critico { background: #c00000; color: #fff; } .imp-t td.stf.sem { background: #f1f1ef; }
+  .imp-t tr.soma td { border: 0; font-style: italic; color: #888; text-align: left; height: auto; }
+  .imp-t tr.soma td:nth-child(2) { text-align: right; }
+  .imp-t tr.score td { background: #f1f1ef; font-weight: 700; text-align: left; }
+  .imp-t tr.score td:nth-child(2) { text-align: right; }
+  .imp-t tr.score td.stf { text-align: center; }
+  .imp-obs-t { font-weight: 700; color: #555; margin-top: 10px; }
+  .imp-obs { border: 1px solid #b8c0c4; min-height: 60px; padding: 5px 6px; white-space: pre-wrap; margin-top: 3px; }
+}

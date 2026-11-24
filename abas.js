@@ -6,6 +6,8 @@
     { id: 'viagens', nome: 'Viagens & Despesas', icone: '✈️', interno: true, chave: 'viagens' },
     { id: 'amostras', nome: 'Controle de Amostras', icone: '🧪', endereco: 'amostras.html', pronto: true, chave: 'amostras',
       descricao: 'Controle das amostras AQM, com descrição dos produtos e local de armazenamento (estante/prateleira).' },
+    { id: 'farol', nome: 'Farol de Indicadores', icone: '🚦', endereco: 'farol.html', pronto: true, chave: 'farol',
+      descricao: 'Farol mensal dos indicadores da área Técnica e Qualidade, com Excel e PDF no modelo Quimicer.' },
   ];
   window.DevAbas = { definirCargo() {} };
   if (window.top !== window.self) return; // já está dentro de outro painel: não repete as abas

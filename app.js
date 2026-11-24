@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://msjyjwwlafpjpixsnbjm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Rv9Aq6g6cU8prVxgJ5SYWw_5Q-RA8Ko';
 const BUCKET = 'comprovantes';
-const APP_VERSAO = '2026.11.06-4';  // mudar junto com versao.json a cada publicação
+const APP_VERSAO = '2026.11.24-1';  // mudar junto com versao.json a cada publicação
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -309,10 +309,13 @@ function marcarMenu() {
 async function acessoAbas() {
   let amostras = false;
   try { const { data } = await sb.rpc('pode_amostras'); amostras = !!data; } catch { /* sem acesso */ }
+  let farol = false;
+  try { const { data } = await sb.rpc('pode_farol'); farol = !!data; } catch { /* sem acesso */ }
   S.acesso = {
     cadastros: eDev() || (eAdmin() && S.eu.acesso_cadastros !== false),
     viagens: eDev() || S.eu.acesso_viagens !== false,
     amostras,
+    farol,
   };
   return S.acesso;
 }
@@ -330,7 +333,7 @@ async function rotear() {
     else if (rota === 'conta') telaConta();
     else if (!podeViagens()) {
       if (podeCad()) { location.hash = '#/admin'; return; }
-      app.innerHTML = `<div class="vazio card">${S.acesso?.amostras ? 'Abra a aba <b>🧪 Controle de Amostras</b> no topo.' : 'Nenhuma área liberada para você ainda. Fale com o desenvolvedor.'}</div>`;
+      app.innerHTML = `<div class="vazio card">${S.acesso?.amostras || S.acesso?.farol ? 'Abra a aba liberada para você na barra do topo.' : 'Nenhuma área liberada para você ainda. Fale com o desenvolvedor.'}</div>`;
     }
     else if (rota === 'viagem' && id) await telaViagem(id);
     else if (rota === 'aprovacao' && eFin()) await telaAprovacao(id || 'enviada');
@@ -1124,7 +1127,8 @@ function celulaAbas(p) {
     ${dev || (p[c] !== false && !(c === 'acesso_cadastros' && p.cargo !== 'admin')) ? 'checked' : ''} ${dev || extra ? 'disabled' : ''}> ${ic} ${nome}</label>`;
   return caixa('acesso_cadastros', '👥', 'Cadastros', !dev && p.cargo !== 'admin' ? ' title="Cadastros só vale para Administrador"' : '')
     + caixa('acesso_viagens', '✈️', 'Viagens & Despesas')
-    + caixa('acesso_amostras', '🧪', 'Controle de Amostras');
+    + caixa('acesso_amostras', '🧪', 'Controle de Amostras')
+    + caixa('acesso_farol', '🚦', 'Farol de Indicadores');
 }
 
 async function telaAdmin(aba) {
